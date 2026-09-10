@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import AssessmentQuestion, AssessmentResponse, AssessmentSession, Competency, LearnerSkillState, SkillNode, SkillPrerequisite
 from app.services.assessment_service import _evidence_adjusted_mastery, _skill_evidence
 from app.services.competency_service import TARGET_LABELS, get_desired_competencies, get_profile_target_skills, get_required_competencies
+from app.services.course_service import recommend_course_for_roadmap_item
 from app.services.profile_service import PROTOTYPE_PROFILE_ID
 
 
@@ -306,6 +307,9 @@ def get_roadmap(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID):
         })
 
     prioritized = sorted(candidates, key=lambda item: item["priority_score"], reverse=True)
+    for item in prioritized:
+        item["recommended_course"] = recommend_course_for_roadmap_item(db, item)
+
     actionable = [item for item in prioritized if item["state"] not in {"mastered", "on_track"}]
     immediate = actionable[:1]
     near_term = actionable[1:4]

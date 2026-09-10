@@ -26,23 +26,82 @@ function reasonText(item) {
     : "Recommended by Phase 4 because this skill has a visible learner-state gap.";
 }
 
-function RoadmapStep({ item, index, isNext }) {
+function duration(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (!hours) return `${mins}m`;
+  return mins ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+function CoursePreview({ course }) {
+  if (!course) {
+    return (
+      <div className="roadmap-course-empty">
+        <strong>Recommended Course</strong>
+        <p>No matching prototype course is available for this roadmap node yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="roadmap-course">
+      <div className="roadmap-course-accent">
+        <span>iGOT Karmayogi</span>
+        <small>Prototype compatible catalog</small>
+      </div>
+      <div className="roadmap-course-body">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-indigo">Recommended Course</p>
+            <Badge tone="gray">{Math.round(course.recommendation_score * 100)} match</Badge>
+          </div>
+          <h4>{course.title}</h4>
+          <p className="roadmap-course-meta">
+            {duration(course.duration_minutes)} | {course.difficulty_level} | {course.learning_format} | {course.language}
+          </p>
+          <p className="roadmap-course-description">{course.short_description}</p>
+          <p className="roadmap-course-reason">{course.recommendation_reason}</p>
+          <div className="roadmap-topic-chips">
+            {course.topics.slice(0, 5).map((topic) => <span key={topic}>{topic}</span>)}
+          </div>
+        </div>
+        <div className="roadmap-course-action">
+          <button type="button">
+            View Course
+          </button>
+          <small>{course.prototype_catalog_notice || "Catalog preview only"}</small>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoadmapStep({ item, index, isNext, expanded, onToggle }) {
   return (
     <article className={`roadmap-step ${isNext ? "roadmap-next" : ""}`}>
       <div className="roadmap-rank">{index + 1}</div>
       <div className="min-w-0 flex-1">
-        {isNext ? <Badge tone="orange">Next Learning Step</Badge> : null}
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <button className="w-full text-left" type="button" onClick={onToggle}>
+          {isNext ? <Badge tone="orange">Recommended Next</Badge> : null}
+        </button>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h3 className="text-xl font-bold text-ink">{item.name}</h3>
+            <button className="text-left text-base font-bold text-ink hover:text-indigo" type="button" onClick={onToggle}>
+              {item.name}
+            </button>
             <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted">{item.competency_name} - {item.skill_node_id}</p>
           </div>
-          <Badge tone={item.target_type === "required" ? "blue" : "green"}>
-            {item.target_type === "required" ? "Required for Role" : "My Goal"}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={item.target_type === "required" ? "blue" : "green"}>
+              {item.target_type === "required" ? "Required for Role" : "My Goal"}
+            </Badge>
+            <button className="roadmap-expand-button" type="button" onClick={onToggle}>
+              {expanded ? "Hide Course" : "View Course"}
+            </button>
+          </div>
         </div>
 
-        <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
+        <div className="mt-3 grid gap-x-4 gap-y-1 text-xs text-slate-700 sm:grid-cols-3">
           <span>Current: <strong>{percent(item.mastery)}</strong></span>
           <span>Target: <strong>{percent(item.target_mastery)}</strong></span>
           <span>Gap: <strong>{gap(item.gap)}</strong></span>
@@ -51,9 +110,12 @@ function RoadmapStep({ item, index, isNext }) {
           <span>Prerequisites: <strong>{item.prerequisite_health.prerequisite_health.replaceAll("_", " ")}</strong></span>
         </div>
 
-        <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+        <div className="mt-3 rounded-lg bg-slate-50 p-2 text-xs leading-5 text-slate-700">
           <strong>Why?</strong>
           <p>{reasonText(item)}</p>
+        </div>
+        <div className={`roadmap-course-panel ${expanded ? "roadmap-course-panel-open" : ""}`}>
+          <CoursePreview course={item.recommended_course} />
         </div>
       </div>
     </article>
@@ -76,6 +138,7 @@ function filterItems(roadmap, activeFilter) {
 export default function RoadmapPage() {
   const [activeProfileId, setActiveProfileId] = useState(getStoredProfileId());
   const [activeFilter, setActiveFilter] = useState("all");
+  const [expandedId, setExpandedId] = useState("");
   const [roadmap, setRoadmap] = useState(null);
   const [error, setError] = useState("");
 
@@ -95,14 +158,18 @@ export default function RoadmapPage() {
   const items = useMemo(() => roadmap ? filterItems(roadmap, activeFilter) : [], [roadmap, activeFilter]);
   const nextItem = roadmap?.immediate_next?.[0];
 
+  useEffect(() => {
+    setExpandedId(nextItem?.skill_node_id || "");
+  }, [nextItem?.skill_node_id, activeFilter]);
+
   if (error) {
     return <main className="mx-auto max-w-5xl px-6 py-8"><section className="section-card">{error}</section></main>;
   }
   if (!roadmap) return <LoadingState />;
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
-      <section className="mb-6 rounded-lg border border-line bg-white p-6 shadow-sm">
+    <main className="mx-auto max-w-7xl px-6 py-6">
+      <section className="mb-4 rounded-lg border border-line bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-indigo">Phase 4 - Decision / Path</p>
@@ -122,16 +189,16 @@ export default function RoadmapPage() {
       {nextItem ? (
         <section className="roadmap-hero">
           <p className="text-xs font-bold uppercase tracking-wide text-indigo">Recommended Next</p>
-          <h2 className="mt-2 text-2xl font-bold text-ink">{nextItem.name}</h2>
-          <p className="mt-2 text-slate-700">
+          <h2 className="mt-1 text-xl font-bold text-ink">{nextItem.name}</h2>
+          <p className="mt-1 text-sm text-slate-700">
             Mastery: <strong>{percent(nextItem.mastery)}</strong> to Target: <strong>{percent(nextItem.target_mastery)}</strong>
             {" "} | Priority: <strong>{priorityLabel(nextItem.priority_score)}</strong>
           </p>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">{reasonText(nextItem)}</p>
+          <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-700">{reasonText(nextItem)}</p>
         </section>
       ) : null}
 
-      <section className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-white p-4 shadow-sm">
+      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 shadow-sm">
         <div className="flex rounded-lg border border-line bg-slate-50 p-1">
           {[
             ["all", "All"],
@@ -162,6 +229,8 @@ export default function RoadmapPage() {
               item={item}
               index={index}
               isNext={item.skill_node_id === nextItem?.skill_node_id}
+              expanded={expandedId === item.skill_node_id}
+              onToggle={() => setExpandedId((current) => current === item.skill_node_id ? "" : item.skill_node_id)}
             />
           ))
         ) : (

@@ -85,3 +85,7 @@ export function getLearnerKnowledgeGraph(profileId) {
 export function getLearnerRoadmap(profileId) {
   return request(withProfile("/learner/roadmap", profileId));
 }
+
+export function getCourse(courseId) {
+  return request(`/courses/${courseId}`);
+}

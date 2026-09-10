@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import assessment, competency_graph, health, learner, profile
+from app.api.routes import assessment, competency_graph, courses, health, learner, profile
 from app.database import Base, SessionLocal, engine
 from app.seed.seed_data import seed_database
 
@@ -89,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(assessment.router)
     app.include_router(learner.router)
     app.include_router(learner.profiles_router)
+    app.include_router(courses.router)
     return app
 
 

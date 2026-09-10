@@ -21,6 +21,7 @@ from app.models import (
     TrainingCatalog,
 )
 from app.seed.question_bank import CS_QUESTION_BANK, PHASE3_QUESTION_BANK
+from app.seed.course_catalog import seed_course_catalog
 
 
 def upsert(db: Session, model, key_name: str, values: dict):
@@ -458,4 +459,5 @@ def seed_database(db: Session):
             {"target_level": target_level},
         )
 
+    seed_course_catalog(db)
     db.commit()
