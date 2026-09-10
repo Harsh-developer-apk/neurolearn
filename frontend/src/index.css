@@ -1,0 +1,340 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  background: #f5f7fb;
+  color: #172033;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.chip {
+  @apply rounded-full border border-line bg-white px-4 py-2 text-sm font-medium text-ink shadow-sm;
+}
+
+.section-card {
+  @apply rounded-lg border border-line bg-white p-6 shadow-sm;
+}
+
+.kg-shell {
+  position: relative;
+  height: 680px;
+  overflow: hidden;
+  border: 1px solid #d8e0ee;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.07);
+}
+
+.kg-node,
+.kg-competency,
+.kg-domain {
+  width: 178px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  padding: 12px;
+  text-align: left;
+  color: #172033;
+  box-shadow: 0 8px 20px rgba(23, 32, 51, 0.08);
+  animation: graphReveal 520ms ease both;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.kg-node:hover,
+.kg-competency:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 14px 30px rgba(23, 32, 51, 0.14);
+}
+
+.kg-node h3,
+.kg-competency h3,
+.kg-domain h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 800;
+}
+
+.kg-node p,
+.kg-competency p,
+.kg-domain p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.kg-node strong {
+  display: inline-flex;
+  margin-top: 8px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #f1f5f9;
+  font-size: 11px;
+}
+
+.kg-node-kicker {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kg-domain {
+  width: 210px;
+  border-color: #334155;
+  background: #172033;
+  color: #ffffff;
+}
+
+.kg-domain p {
+  color: #cbd5e1;
+}
+
+.kg-competency-required {
+  border-color: #4f46e5;
+}
+
+.kg-competency-desired {
+  border-color: #0f766e;
+}
+
+.kg-node-strong {
+  border-left: 6px solid #10b981;
+}
+
+.kg-node-weak {
+  border-left: 6px solid #f97316;
+}
+
+.kg-node-uncertain {
+  border-left: 6px solid #6366f1;
+}
+
+.kg-node-not-assessed {
+  border-left: 6px solid #94a3b8;
+}
+
+.kg-node-desired {
+  border-left: 6px solid #0f766e;
+}
+
+.kg-edge-domain,
+.kg-edge-required,
+.kg-edge-desired,
+.kg-edge-prereq {
+  animation: edgeReveal 700ms ease both;
+}
+
+.kg-edge-prereq .react-flow__edge-path {
+  stroke: #f97316;
+  stroke-dasharray: 7 5;
+}
+
+.kg-edge-required .react-flow__edge-path {
+  stroke: #4f46e5;
+}
+
+.kg-edge-desired .react-flow__edge-path {
+  stroke: #0f766e;
+}
+
+.kg-legend {
+  position: absolute;
+  z-index: 5;
+  left: 14px;
+  top: 14px;
+  display: flex;
+  max-width: 650px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  border: 1px solid #d8e0ee;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  backdrop-filter: blur(6px);
+}
+
+.legend-dot::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.legend-strong::before { background: #10b981; }
+.legend-weak::before { background: #f97316; }
+.legend-uncertain::before { background: #6366f1; }
+.legend-not-assessed::before { background: #94a3b8; }
+.legend-desired::before { background: #0f766e; }
+
+.kg-tooltip {
+  position: absolute;
+  z-index: 6;
+  right: 16px;
+  top: 16px;
+  width: 260px;
+  border: 1px solid #d8e0ee;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+  box-shadow: 0 14px 30px rgba(23, 32, 51, 0.16);
+}
+
+.kg-detail {
+  min-height: 420px;
+}
+
+.roadmap-hero {
+  margin-bottom: 24px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: #fff7ed;
+  padding: 24px;
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.07);
+  animation: graphReveal 420ms ease both;
+}
+
+.roadmap-path {
+  position: relative;
+  display: grid;
+  gap: 0;
+  padding: 0 0 12px;
+}
+
+.roadmap-origin {
+  justify-self: center;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  background: #172033;
+  padding: 10px 18px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  animation: graphReveal 420ms ease both;
+}
+
+.roadmap-goal {
+  background: #0f766e;
+  border-color: #0f766e;
+}
+
+.roadmap-step {
+  position: relative;
+  display: flex;
+  gap: 18px;
+  width: min(820px, 100%);
+  margin: 42px auto 0;
+  border: 1px solid #d8e0ee;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 22px;
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.07);
+  animation: roadmapReveal 520ms ease both;
+}
+
+.roadmap-step::before {
+  content: "";
+  position: absolute;
+  top: -42px;
+  left: 50%;
+  width: 2px;
+  height: 42px;
+  background: #94a3b8;
+  transform: translateX(-50%) scaleY(0);
+  transform-origin: top;
+  animation: lineReveal 500ms ease forwards;
+}
+
+.roadmap-step::after {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.roadmap-step:nth-of-type(2) { animation-delay: 80ms; }
+.roadmap-step:nth-of-type(3) { animation-delay: 160ms; }
+.roadmap-step:nth-of-type(4) { animation-delay: 240ms; }
+.roadmap-step:nth-of-type(5) { animation-delay: 320ms; }
+.roadmap-step:nth-of-type(6) { animation-delay: 400ms; }
+.roadmap-step:nth-of-type(7) { animation-delay: 480ms; }
+.roadmap-step:nth-of-type(8) { animation-delay: 560ms; }
+
+.roadmap-next {
+  border-color: #f59e0b;
+  box-shadow: 0 16px 34px rgba(245, 158, 11, 0.18);
+}
+
+.roadmap-rank {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: #4f46e5;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+@keyframes graphReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes edgeReveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes roadmapReveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lineReveal {
+  to {
+    transform: translateX(-50%) scaleY(1);
+  }
+}
+
+@media (max-width: 760px) {
+  .kg-shell {
+    height: 620px;
+  }
+
+  .kg-legend,
+  .kg-tooltip {
+    position: static;
+    margin: 12px;
+  }
+
+  .roadmap-step {
+    padding: 18px;
+  }
+}
