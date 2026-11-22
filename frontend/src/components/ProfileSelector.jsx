@@ -2,14 +2,16 @@ import { useEffect, useState } from "react";
 
 import { getProfiles } from "../services/api.js";
 
-const STORAGE_KEY = "shukraniti.activeProfileId";
+const STORAGE_KEY = "learning.dsaProfileId";
 
 export function getStoredProfileId() {
-  return localStorage.getItem(STORAGE_KEY) || "PROFILE001";
+  const profileId = localStorage.getItem(STORAGE_KEY);
+  if (profileId === "PROFILE-DSA") return profileId;
+  return "PROFILE-DSA";
 }
 
 export function setStoredProfileId(profileId) {
-  localStorage.setItem(STORAGE_KEY, profileId);
+  if (profileId === "PROFILE-DSA") localStorage.setItem(STORAGE_KEY, profileId);
 }
 
 export default function ProfileSelector({ activeProfileId, onChange }) {

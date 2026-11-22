@@ -17,12 +17,13 @@ function seconds(ms) {
 }
 
 function profileDomain(profileId) {
-  return profileId === "PROFILE002" ? "Computer Science" : "Statistics";
+  return profileId === "PROFILE-DSA" ? "Data Structures and Algorithms" : "Learning Domain";
 }
 
 function competencyEvidenceStatus(competency) {
   if (!competency.evidence_coverage?.assessed_skills) return "not_assessed";
   if (competency.observed_mastery === null || competency.observed_mastery === undefined) return "not_assessed";
+  if (!competency.skills.some((skill) => (skill.effective_attempts ?? skill.attempts) >= 2 && ["weak", "sufficient_mastery"].includes(skill.evidence_status))) return "uncertain";
   if ((competency.gap ?? 0) >= 0.3) return "weak";
   if (competency.evidence_coverage.assessed_skills < competency.evidence_coverage.total_skills) return "uncertain";
   return "sufficient_mastery";
@@ -133,11 +134,25 @@ function buildFullFlow(graph, selectedId) {
   const items = buildItems(graph);
   const selected = items.itemById.get(selectedId) || items.itemById.get(defaultSelectedId(items));
   const highlightedPath = pathToRoot(selected, items);
+  const skillRowGap = 70;
+  const skillsByCompetency = items.skills.reduce((groups, skill) => {
+    groups[skill.parentCompetencyId] = groups[skill.parentCompetencyId] || [];
+    groups[skill.parentCompetencyId].push(skill);
+    return groups;
+  }, {});
+  let nextGroupY = 30;
+  const competencyPositions = new Map(items.competencies.map((competency) => {
+    const skillCount = (skillsByCompetency[competency.id] || []).length;
+    const groupHeight = Math.max(112, skillCount * skillRowGap);
+    const competencyY = nextGroupY + (Math.max(0, skillCount - 1) * skillRowGap) / 2;
+    nextGroupY += groupHeight;
+    return [competency.id, competencyY];
+  }));
   const nodes = [
     {
       id: "profile-root",
       type: "domain",
-      position: { x: 20, y: 270 },
+      position: { x: 20, y: (30 + nextGroupY) / 2 },
       data: {
         label: profileDomain(graph.profile_id),
         item: { id: "profile-root", kind: "profile", label: profileDomain(graph.profile_id) },
@@ -148,15 +163,12 @@ function buildFullFlow(graph, selectedId) {
   ];
   const edges = [];
 
-  const rowGap = 112;
-  const competencyStartY = Math.max(30, 300 - ((items.competencies.length - 1) * rowGap) / 2);
-
-  items.competencies.forEach((competency, index) => {
-    const y = competencyStartY + index * rowGap;
+  items.competencies.forEach((competency) => {
+    const competencyY = competencyPositions.get(competency.id);
     nodes.push({
       id: competency.id,
       type: "topic",
-      position: { x: 260, y },
+      position: { x: 260, y: competencyY },
       data: {
         label: competency.label,
         item: competency,
@@ -176,23 +188,17 @@ function buildFullFlow(graph, selectedId) {
     });
   });
 
-  const skillsByCompetency = items.skills.reduce((groups, skill) => {
-    groups[skill.parentCompetencyId] = groups[skill.parentCompetencyId] || [];
-    groups[skill.parentCompetencyId].push(skill);
-    return groups;
-  }, {});
-
-  items.competencies.forEach((competency, competencyIndex) => {
-    const competencyY = competencyStartY + competencyIndex * rowGap;
+  items.competencies.forEach((competency) => {
+    const competencyY = competencyPositions.get(competency.id);
     const skills = skillsByCompetency[competency.id] || [];
-    const localStartY = competencyY - ((skills.length - 1) * 58) / 2;
+    const localStartY = competencyY - ((skills.length - 1) * skillRowGap) / 2;
 
     skills.forEach((skill, skillIndex) => {
-      const y = localStartY + skillIndex * 58;
+      const skillY = localStartY + skillIndex * skillRowGap;
       nodes.push({
         id: skill.id,
         type: "topic",
-        position: { x: 560, y },
+        position: { x: 560, y: skillY },
         data: {
           label: skill.label,
           item: skill,
@@ -227,6 +233,17 @@ function buildFullFlow(graph, selectedId) {
         label: "prerequisite"
       });
     });
+    (skill.study_predecessors || []).forEach((predecessorId) => {
+      const predecessor = items.skillBySkillId.get(predecessorId);
+      if (!predecessor) return;
+      edges.push({
+        id: `study-${predecessor.id}-${skill.id}`,
+        source: predecessor.id,
+        target: skill.id,
+        className: "kg-edge-muted kg-edge-prereq",
+        label: "suggested order"
+      });
+    });
   });
 
   return { nodes, edges, selected, items };
@@ -241,7 +258,7 @@ function DetailCard({ item, compact = false }) {
   const mastery = itemMastery(item);
   const gap = item.gap === null || item.gap === undefined ? "Unknown" : `${Math.round(item.gap * 100)} percentage points`;
   const prerequisites = item.prerequisites?.length ? item.prerequisites.join(", ") : "None";
-  const prerequisiteStatus = item.prerequisites?.length && mastery !== null && item.evidence_status !== "sufficient_mastery" ? "Needs Reinforcement" : "Ready";
+  const prerequisiteStatus = item.prerequisite_health?.prerequisite_health?.replaceAll("_", " ") || "No prerequisites";
   const evidenceCount = item.kind === "competency" ? `${item.evidence_coverage.assessed_skills}/${item.evidence_coverage.total_skills} skill(s)` : `${item.attempts} question(s)`;
 
   return (
@@ -326,8 +343,8 @@ export default function KnowledgeGraphStatePage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-indigo">Phase 4 - State</p>
-            <h1 className="mt-2 text-3xl font-bold text-ink">Knowledge Graph</h1>
-            <p className="mt-3 text-slate-700">Explore your current competency state and the relationships between skills.</p>
+            <h1 className="mt-2 text-3xl font-bold text-ink">DSA Knowledge Graph</h1>
+            <p className="mt-3 text-slate-700">Explore evidence for 10 DSA topics and their prerequisites. Unassessed topics remain visible for future learning.</p>
             {graph.assessment_source?.assessment_mode === "sample" ? <div className="mt-3"><Badge tone="orange">Demo Sample Diagnostic</Badge></div> : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">

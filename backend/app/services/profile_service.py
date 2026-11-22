@@ -2,15 +2,17 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models import Activity, Department, Organization, Position, Profile, ProfileActivity, ProfileTraining, Role, TrainingCatalog
+from app.seed.dsa_curriculum import DSA_PROFILE_ID
 
 
-PROTOTYPE_PROFILE_ID = "PROFILE001"
+PROTOTYPE_PROFILE_ID = DSA_PROFILE_ID
 
 
 def list_profiles(db: Session):
     rows = (
         db.query(Profile, Department)
         .join(Department, Profile.department_id == Department.department_id)
+        .filter(Profile.id == PROTOTYPE_PROFILE_ID)
         .order_by(Profile.id)
         .all()
     )
@@ -18,8 +20,8 @@ def list_profiles(db: Session):
         {
             "profile_id": profile.id,
             "name": profile.full_name,
-            "domain": "Computer Science" if profile.id == "PROFILE002" else "Statistics",
-            "label": f"{profile.full_name} - {'Computer Science' if profile.id == 'PROFILE002' else 'Statistics'}",
+            "domain": department.name,
+            "label": f"{profile.full_name} - {department.name}",
             "department": department.name,
         }
         for profile, department in rows

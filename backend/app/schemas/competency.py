@@ -44,6 +44,7 @@ class SkillNodeOut(BaseModel):
     description: str
     difficulty_level: int
     prerequisites: list[str]
+    study_predecessors: list[str] = []
     next_skills: list[str]
 
 

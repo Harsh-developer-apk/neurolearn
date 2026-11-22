@@ -57,7 +57,7 @@ export default function ProfilePage() {
         <div className="bg-indigo px-6 py-5 text-white">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-blue-100">ShukraNiti Phase 1A + 1B</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-blue-100">Learner Profile</p>
               <h1 className="mt-2 text-3xl font-bold">Competency profile and target layer</h1>
             </div>
             <ProfileSelector activeProfileId={activeProfileId} onChange={setActiveProfileId} />
@@ -154,7 +154,7 @@ export default function ProfilePage() {
           <p className="text-sm font-bold uppercase tracking-wide text-muted">Next module</p>
           <h2 className="mt-1 text-2xl font-bold text-ink">Diagnostic assessment</h2>
           <p className="mt-2 text-sm text-slate-700">
-            Start a 15-question diagnostic to estimate current learner state from answer evidence.
+            Start a 15-question DSA diagnostic drawn from 100 questions across 10 topics to estimate your knowledge from answer evidence.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

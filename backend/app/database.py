@@ -6,7 +6,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DATABASE_URL = os.getenv("SHUKRANITI_DATABASE_URL", f"sqlite:///{BASE_DIR / 'shukraniti.db'}")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'learning.db'}")
 
 engine = create_engine(
     DATABASE_URL,

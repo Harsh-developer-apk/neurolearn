@@ -43,20 +43,6 @@ def _course(course_id, title, area, mappings, topics, duration=180, difficulty="
     }
 
 
-STAT_COURSES = [
-    _course("STAT-COURSE-001", "Survey Design Fundamentals", "survey objectives and survey planning", [("COMP001", 0.9), ("SKILL001", 1.0), ("SKILL003", 0.7)], ["Survey objectives", "Target population", "Indicators", "Reference period", "Design constraints"], 210, "Beginner", "Capacity Building Centre"),
-    _course("STAT-COURSE-002", "Questionnaire Design and Measurement", "questionnaire design and measurement quality", [("COMP001", 0.85), ("SKILL002", 1.0), ("SKILL004", 0.65)], ["Question wording", "Response options", "Measurement error", "Piloting", "Bias reduction"], 180),
-    _course("STAT-COURSE-003", "Sampling Methods and Sampling Frames", "sampling frames and probability sampling", [("COMP002", 0.9), ("SKILL005", 0.75), ("SKILL006", 1.0), ("SKILL007", 0.85)], ["Population", "Sample", "Sampling frames", "Simple random sampling", "Frame errors"], 240, "Intermediate", "National Skills Learning Centre"),
-    _course("STAT-COURSE-004", "Statistical Sampling: Bias and Representativeness", "sampling bias and representativeness", [("COMP002", 0.75), ("SKILL008", 0.85), ("SKILL004", 1.0)], ["Stratification", "Coverage bias", "Non-response", "Representativeness", "Subgroup precision"], 220),
-    _course("STAT-COURSE-005", "Data Quality Management", "data quality management for survey evidence", [("COMP003", 0.9), ("SKILL009", 0.8), ("SKILL012", 1.0)], ["Completeness", "Validity", "Consistency", "Quality indicators", "Review workflows"], 190, "Beginner", "Digital Learning Academy"),
-    _course("STAT-COURSE-006", "Data Validation and Quality Assurance", "validation rules and quality assurance", [("COMP003", 0.85), ("SKILL010", 1.0), ("SKILL011", 0.9)], ["Range checks", "Skip checks", "Duplicate detection", "Outlier review", "Audit trails"], 210),
-    _course("STAT-COURSE-007", "Fundamentals of Statistical Analysis", "statistical analysis and interpretation", [("COMP004", 0.9), ("SKILL013", 0.8), ("SKILL014", 0.85)], ["Descriptive analysis", "Sampling uncertainty", "Confidence intervals", "Inference", "Interpretation"], 240, "Intermediate", "Capacity Building Centre"),
-    _course("STAT-COURSE-008", "Descriptive Statistics and Data Interpretation", "descriptive statistics and data interpretation", [("COMP004", 0.75), ("SKILL013", 1.0)], ["Mean", "Median", "Spread", "Skew", "Tables"], 160, "Beginner"),
-    _course("STAT-COURSE-009", "Statistical Metadata and Data Documentation", "metadata standards and data documentation", [("COMP005", 1.0), ("SKILL017", 0.9), ("SKILL018", 0.9), ("SKILL020", 0.8)], ["Variable labels", "Units", "Code lists", "Classifications", "Reuse"], 170, "Beginner", "National Skills Learning Centre"),
-    _course("STAT-COURSE-010", "Statistical Reporting and Evidence-Based Interpretation", "statistical reporting and evidence-based interpretation", [("COMP004", 0.8), ("SKILL014", 0.75), ("SKILL015", 0.85), ("SKILL016", 0.7)], ["Report structure", "Uncertainty", "Hypothesis testing", "Regression interpretation", "Evidence statements"], 230, "Advanced"),
-]
-
-
 CS_COURSES = [
     _course("CS-COURSE-001", "Programming Fundamentals with Java", "programming fundamentals with Java", [("COMP-CS-001", 0.9), ("CS-SKILL-OOPS", 0.55)], ["Variables", "Control flow", "Methods", "Debugging", "Basic programs"], 240, "Beginner"),
     _course("CS-COURSE-002", "Object-Oriented Programming with Java", "object-oriented programming in Java", [("COMP-CS-001", 0.9), ("CS-SKILL-OOPS", 1.0)], ["Classes", "Objects", "Inheritance", "Polymorphism", "Interfaces"], 270, "Intermediate", "Digital Learning Academy"),
@@ -86,7 +72,7 @@ CS_COURSES = [
 ]
 
 
-COURSE_CATALOG = STAT_COURSES + CS_COURSES
+COURSE_CATALOG = CS_COURSES
 
 
 def seed_course_catalog(db: Session):

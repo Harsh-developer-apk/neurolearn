@@ -50,6 +50,7 @@ function ModelPanel({ modelState, feedback }) {
         <div>
           <p className="font-bold text-ink">Evidence</p>
           <p className="mt-1 text-slate-700">Confidence: {feedback ? `${feedback.response_evidence.confidence} / 5` : `${currentSkill?.confidence_avg || 0} / 5 avg`}</p>
+          {feedback?.response_evidence.weighting_reason ? <p className="mt-1 text-xs text-slate-700">{feedback.response_evidence.weighting_reason}</p> : null}
           <p className="text-slate-700">Response time: {feedback ? formatSeconds(feedback.response_evidence.response_time_ms) : formatSeconds(currentSkill?.avg_response_time_ms || 0)}</p>
           <p className="text-slate-700">Cognitive level: {question?.cognitive_level || "-"}</p>
           <p className="text-slate-700">Question type: {question?.question_type || "-"}</p>
@@ -218,7 +219,7 @@ export default function AssessmentPlaceholder() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-indigo">Phase 3</p>
-            <h1 className="mt-2 text-3xl font-bold text-ink">Diagnostic Assessment</h1>
+            <h1 className="mt-2 text-3xl font-bold text-ink">DSA Diagnostic Assessment</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <ProfileSelector
@@ -251,7 +252,10 @@ export default function AssessmentPlaceholder() {
       {!sessionId ? (
         <section className="section-card">
           <Badge tone="blue">15-question adaptive evidence budget</Badge>
-          <h2 className="mt-4 text-2xl font-bold text-ink">Ready to assess current competency evidence</h2>
+          <h2 className="mt-4 text-2xl font-bold text-ink">Ready to assess your DSA knowledge</h2>
+          <p className="mt-3 text-slate-700">
+            Answer 15 adaptive questions from a bank of 100 covering 10 DSA topics. Topics without enough evidence remain unassessed or uncertain.
+          </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               className="rounded-lg bg-indigo px-5 py-3 text-sm font-bold text-white disabled:opacity-60"

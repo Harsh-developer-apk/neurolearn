@@ -47,6 +47,8 @@ class SkillUpdateOut(BaseModel):
     evidence_status: str | None = None
     attempts: int | None = None
     correct_attempts: int | None = None
+    effective_attempts: float | None = None
+    guessing_attempts: int = 0
 
 
 class SubmitAnswerResponse(BaseModel):
@@ -83,6 +85,8 @@ class SkillMasteryOut(BaseModel):
     mastery_probability: float
     raw_bkt_mastery_probability: float | None = None
     attempts: int
+    effective_attempts: float = 0.0
+    guessing_attempts: int = 0
     correct_attempts: int
     incorrect_attempts: int = 0
     confidence_avg: float = 0.0

@@ -29,7 +29,7 @@ def ensure_phase3_schema():
 
         question_columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(assessment_questions)").all()]
         question_defaults = {
-            "profile_id": "TEXT NOT NULL DEFAULT 'PROFILE001'",
+            "profile_id": "TEXT NOT NULL DEFAULT 'PROFILE-DSA'",
             "question_type": "TEXT NOT NULL DEFAULT 'single_choice'",
             "cognitive_level": "TEXT NOT NULL DEFAULT 'recall'",
             "correct_options": "TEXT NOT NULL DEFAULT '[]'",
@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
     finally:
         db.close()
 
-    app = FastAPI(title="ShukraNiti Competency Intelligence API")
+    app = FastAPI(title="Competency Intelligence API")
 
     app.add_middleware(
         CORSMiddleware,

@@ -11,7 +11,8 @@ from app.seed.question_bank import PROFILE_ACTIVE_COMPETENCY_IDS
 from app.services.competency_service import get_required_competencies
 from app.services.bkt_service import L0, update_mastery_probability
 from app.services.irt_service import ability_label, probability_correct, update_theta
-from app.services.profile_service import PROTOTYPE_PROFILE_ID
+from app.services.confidence_service import response_weight
+from app.services.profile_service import PROTOTYPE_PROFILE_ID, get_prototype_profile
 
 
 MAX_QUESTIONS = 15
@@ -110,25 +111,28 @@ def _skill_evidence(rows: list[tuple[AssessmentResponse, AssessmentQuestion]]) -
     correct = sum(1 for response, _ in rows if response.correct)
     confidence_avg = round(sum(response.confidence for response, _ in rows) / attempts, 2) if attempts else 0.0
     avg_time = round(sum(response.response_time_ms for response, _ in rows) / attempts, 1) if attempts else 0.0
-    has_higher = any(question.cognitive_level in HIGHER_COGNITIVE_LEVELS for _, question in rows)
-    has_nontrivial = any(question.irt_b >= 0.0 for _, question in rows)
+    reliable_rows = [(response, question) for response, question in rows if response.confidence > 1]
+    effective_attempts = sum(response_weight(response.confidence) for response, _ in reliable_rows)
+    effective_correct = sum(response_weight(response.confidence) for response, _ in reliable_rows if response.correct)
+    has_higher = any(question.cognitive_level in HIGHER_COGNITIVE_LEVELS for _, question in reliable_rows)
+    has_nontrivial = any(question.irt_b >= 0.0 for _, question in reliable_rows)
 
     if attempts == 0:
         status = "limited_evidence"
         decision = "Gather evidence"
     elif attempts >= MAX_SKILL_EVIDENCE:
-        status = "sufficient_mastery" if correct >= 4 and has_higher else "uncertain"
+        status = "sufficient_mastery" if effective_correct >= 4 and has_higher else "uncertain"
         decision = "Stop skill - maximum evidence reached"
-    elif attempts >= 3 and correct == attempts and has_higher and has_nontrivial:
+    elif effective_attempts >= 3 and effective_correct == effective_attempts and has_higher and has_nontrivial:
         status = "sufficient_mastery"
         decision = "Skill evidence sufficient"
-    elif attempts >= 3 and correct == 0:
+    elif effective_attempts >= 3 and effective_correct == 0:
         status = "weak"
         decision = "Skill appears weak"
-    elif attempts >= 3 and correct <= 1:
+    elif effective_attempts >= 3 and effective_correct <= 1:
         status = "weak"
         decision = "Weak evidence"
-    elif attempts < MIN_SKILL_EVIDENCE:
+    elif effective_attempts < MIN_SKILL_EVIDENCE:
         status = "gathering_evidence"
         decision = "Continue skill"
     else:
@@ -138,6 +142,9 @@ def _skill_evidence(rows: list[tuple[AssessmentResponse, AssessmentQuestion]]) -
     return {
         "attempts": attempts,
         "correct_attempts": correct,
+        "effective_attempts": round(effective_attempts, 4),
+        "effective_correct_attempts": round(effective_correct, 4),
+        "guessing_attempts": attempts - len(reliable_rows),
         "incorrect_attempts": attempts - correct,
         "confidence_avg": confidence_avg,
         "avg_response_time_ms": avg_time,
@@ -148,11 +155,11 @@ def _skill_evidence(rows: list[tuple[AssessmentResponse, AssessmentQuestion]]) -
 
 
 def _evidence_adjusted_mastery(raw_mastery: float, evidence: dict) -> float:
-    attempts = evidence["attempts"]
+    attempts = evidence.get("effective_attempts", evidence["attempts"])
     if attempts <= 0:
-        return round(raw_mastery, 4)
+        return round(min(raw_mastery, L0), 4)
 
-    accuracy = evidence["correct_attempts"] / attempts
+    accuracy = evidence.get("effective_correct_attempts", evidence["correct_attempts"]) / attempts
     status = evidence["evidence_status"]
     has_higher = evidence["has_higher_cognitive_evidence"]
 
@@ -177,7 +184,7 @@ def _evidence_adjusted_mastery(raw_mastery: float, evidence: dict) -> float:
 def _prerequisite_penalty(db: Session, skill_node_id: str, skill_evidence: dict[str, dict]) -> float:
     prerequisites = (
         db.query(SkillPrerequisite.prerequisite_skill_node_id)
-        .filter(SkillPrerequisite.skill_node_id == skill_node_id)
+        .filter(SkillPrerequisite.skill_node_id == skill_node_id, SkillPrerequisite.relationship_type == "prerequisite")
         .all()
     )
     penalty = 0.0
@@ -306,6 +313,8 @@ def _model_state(db: Session, session: AssessmentSession, question: AssessmentQu
             "mastery_probability": state.mastery_probability if state else None,
             "attempts": evidence["attempts"],
             "correct_attempts": evidence["correct_attempts"],
+            "effective_attempts": evidence["effective_attempts"],
+            "guessing_attempts": evidence["guessing_attempts"],
             "confidence_avg": evidence["confidence_avg"],
             "avg_response_time_ms": evidence["avg_response_time_ms"],
             "evidence_status": evidence["evidence_status"],
@@ -357,7 +366,14 @@ def _model_state(db: Session, session: AssessmentSession, question: AssessmentQu
     }
 
 
+def _validate_assessment_profile(db: Session, profile_id: str):
+    get_prototype_profile(db, profile_id)
+    if profile_id not in PROFILE_ACTIVE_COMPETENCY_IDS:
+        raise HTTPException(status_code=400, detail="Only the DSA diagnostic is currently available")
+
+
 def start_assessment(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID, assessment_mode: str = "live"):
+    _validate_assessment_profile(db, profile_id)
     session = AssessmentSession(
         session_id=f"{'SAMPLE' if assessment_mode == 'sample' else 'SESSION'}{uuid4().hex[:8].upper()}",
         profile_id=profile_id,
@@ -389,13 +405,17 @@ def _sample_answer_for_question(question: AssessmentQuestion, sequence_number: i
     wrong_option = next(option for option in ["A", "B", "C", "D"] if option not in correct_options)
 
     profile_skill_pattern = {
-        "PROFILE001": {
-            "SKILL001": [True, True, False, True],
-            "SKILL004": [False, True, False],
-            "SKILL006": [False, False, True],
-            "SKILL008": [True, False, True],
-            "SKILL013": [True, True],
-            "SKILL014": [False, True],
+        PROTOTYPE_PROFILE_ID: {
+            "DSA-COMPLEXITY": [True, True, True, False],
+            "DSA-ARRAYS": [True, True, False, True],
+            "DSA-LINKED": [False, True, False],
+            "DSA-STACKS": [True, True, False],
+            "DSA-HASHING": [True, False, True],
+            "DSA-SEARCH-SORT": [True, False, True],
+            "DSA-TREES": [False, True, False],
+            "DSA-GRAPHS": [False, False, True],
+            "DSA-RECURSION": [True, True, False],
+            "DSA-GREEDY-DP": [False, False, True],
         },
         "PROFILE002": {
             "CS-SKILL-OOPS": [True, True, True, False],
@@ -447,6 +467,7 @@ def _sample_answer_dataset(db: Session, profile_id: str) -> dict[str, dict]:
 
 
 def run_sample_assessment(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID):
+    _validate_assessment_profile(db, profile_id)
     db.query(LearnerSkillState).filter(LearnerSkillState.profile_id == profile_id).delete()
     db.commit()
 
@@ -530,7 +551,7 @@ def submit_answer(
 
     theta_before = session.theta
     estimated_probability = probability_correct(theta_before, question.irt_b)
-    new_theta, _ = update_theta(theta_before, 1 if correct else 0, question.irt_b)
+    new_theta, _ = update_theta(theta_before, 1 if correct else 0, question.irt_b, confidence=confidence)
     session.theta = round(new_theta, 4)
     session.current_question_number += 1
 
@@ -543,7 +564,7 @@ def submit_answer(
         .first()
     )
     mastery_before = state.mastery_probability if state else L0
-    mastery_after = update_mastery_probability(mastery_before, correct)
+    mastery_after = update_mastery_probability(mastery_before, correct, confidence)
 
     if not state:
         state = LearnerSkillState(
@@ -618,6 +639,8 @@ def submit_answer(
             "skill_node_id": state.skill_node_id,
             "mastery_probability": state.mastery_probability,
             "mastery_before": round(mastery_before, 4),
+            "effective_attempts": evidence["effective_attempts"],
+            "guessing_attempts": evidence["guessing_attempts"],
             "evidence_status": evidence["evidence_status"],
             "attempts": evidence["attempts"],
             "correct_attempts": evidence["correct_attempts"],
@@ -632,11 +655,14 @@ def submit_answer(
             "is_correct": correct,
             "response_time_ms": response_time_ms,
             "confidence": confidence,
+            "evidence_weight": response_weight(confidence),
+            "theta_update_weight": 0.0 if confidence == 1 and correct else response_weight(confidence),
+            "weighting_reason": "Guessing: no positive ability update and minimal mastery influence" if confidence == 1 else "Low confidence: reduced influence" if confidence == 2 else "Standard evidence influence",
             "irt_theta_before": round(theta_before, 4),
             "irt_theta_after": session.theta,
             "bkt_mastery_before": round(mastery_before, 4),
             "bkt_mastery_after": round(mastery_after, 4),
-            "misconception_tags": _json_list(question.misconception_tags) if not correct else [],
+            "misconception_tags": _json_list(question.misconception_tags) if not correct and confidence > 1 else [],
             "timestamp": response.created_at.isoformat(),
         },
     }
@@ -677,7 +703,7 @@ def get_assessment_result(db: Session, session_id: str):
     for response, question in (
         db.query(AssessmentResponse, AssessmentQuestion)
         .join(AssessmentQuestion, AssessmentResponse.question_id == AssessmentQuestion.question_id)
-        .filter(AssessmentResponse.session_id == session_id, AssessmentResponse.correct == False)  # noqa: E712
+        .filter(AssessmentResponse.session_id == session_id, AssessmentResponse.correct == False, AssessmentResponse.confidence > 1)  # noqa: E712
         .all()
     ):
         tags = _json_list(question.misconception_tags)
@@ -751,6 +777,8 @@ def get_skill_mastery_states(db: Session, profile_id: str, session_id: str | Non
             "competency_name": competency.name,
             "mastery_probability": display_mastery,
             "raw_bkt_mastery_probability": round(raw_mastery, 4),
+            "effective_attempts": evidence.get("effective_attempts", evidence["attempts"]),
+            "guessing_attempts": evidence.get("guessing_attempts", 0),
             "attempts": evidence["attempts"],
             "correct_attempts": evidence["correct_attempts"],
             "incorrect_attempts": evidence["incorrect_attempts"],
@@ -769,7 +797,7 @@ def _competency_summary(skills: list[dict]) -> list[dict]:
     summaries = []
     for (competency_id, name), skill_rows in sorted(grouped.items()):
         mastery = sum(skill["mastery_probability"] for skill in skill_rows) / len(skill_rows)
-        evidence_count = sum(skill["attempts"] for skill in skill_rows)
+        evidence_count = sum(skill.get("effective_attempts", skill["attempts"]) for skill in skill_rows)
         if evidence_count >= 6:
             evidence_status = "moderate"
         elif evidence_count >= 3:

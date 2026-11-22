@@ -90,6 +90,14 @@ def _skill_to_dict(db: Session, skill: SkillNode):
             row.prerequisite_skill_node_id
             for row in db.query(SkillPrerequisite)
             .filter(SkillPrerequisite.skill_node_id == skill.skill_node_id)
+            .filter(SkillPrerequisite.relationship_type == "prerequisite")
+            .order_by(SkillPrerequisite.prerequisite_skill_node_id)
+            .all()
+        ],
+        "study_predecessors": [
+            row.prerequisite_skill_node_id
+            for row in db.query(SkillPrerequisite)
+            .filter(SkillPrerequisite.skill_node_id == skill.skill_node_id, SkillPrerequisite.relationship_type == "study_order")
             .order_by(SkillPrerequisite.prerequisite_skill_node_id)
             .all()
         ],
@@ -97,6 +105,7 @@ def _skill_to_dict(db: Session, skill: SkillNode):
             row.skill_node_id
             for row in db.query(SkillPrerequisite)
             .filter(SkillPrerequisite.prerequisite_skill_node_id == skill.skill_node_id)
+            .filter(SkillPrerequisite.relationship_type == "prerequisite")
             .order_by(SkillPrerequisite.skill_node_id)
             .all()
         ],
@@ -125,9 +134,15 @@ def get_skills_for_competency(db: Session, competency_id: str):
 
 
 def get_competency_graph(db: Session):
-    competencies = db.query(Competency).order_by(Competency.competency_id).all()
+    competency_ids = {
+        target["competency_id"]
+        for target in get_required_competencies(db) + get_desired_competencies(db)
+    }
+    competencies = db.query(Competency).filter(Competency.competency_id.in_(competency_ids)).order_by(Competency.competency_id).all()
+    skill_ids = db.query(SkillNode.skill_node_id).filter(SkillNode.competency_id.in_(competency_ids))
     relationships = (
         db.query(SkillPrerequisite)
+        .filter(SkillPrerequisite.skill_node_id.in_(skill_ids), SkillPrerequisite.prerequisite_skill_node_id.in_(skill_ids))
         .order_by(SkillPrerequisite.prerequisite_skill_node_id, SkillPrerequisite.skill_node_id)
         .all()
     )
@@ -157,6 +172,7 @@ def get_prerequisites(db: Session, skill_node_id: str):
         db.query(SkillPrerequisite, SkillNode)
         .join(SkillNode, SkillPrerequisite.prerequisite_skill_node_id == SkillNode.skill_node_id)
         .filter(SkillPrerequisite.skill_node_id == skill_node_id)
+        .filter(SkillPrerequisite.relationship_type == "prerequisite")
         .order_by(SkillNode.skill_node_id)
         .all()
     )
@@ -172,6 +188,7 @@ def get_next_skills(db: Session, skill_node_id: str):
         db.query(SkillPrerequisite, SkillNode)
         .join(SkillNode, SkillPrerequisite.skill_node_id == SkillNode.skill_node_id)
         .filter(SkillPrerequisite.prerequisite_skill_node_id == skill_node_id)
+        .filter(SkillPrerequisite.relationship_type == "prerequisite")
         .order_by(SkillNode.skill_node_id)
         .all()
     )

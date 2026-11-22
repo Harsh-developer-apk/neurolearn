@@ -4,18 +4,19 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.schemas.assessment import AssessmentResultResponse, StartAssessmentResponse, SubmitAnswerRequest, SubmitAnswerResponse
 from app.services.assessment_service import get_assessment_result, run_sample_assessment, start_assessment, submit_answer
+from app.services.profile_service import PROTOTYPE_PROFILE_ID
 
 
 router = APIRouter(prefix="/api/v1/assessment", tags=["assessment"])
 
 
 @router.post("/start", response_model=StartAssessmentResponse)
-def start(profile_id: str = Query("PROFILE001"), db: Session = Depends(get_db)):
+def start(profile_id: str = Query(PROTOTYPE_PROFILE_ID), db: Session = Depends(get_db)):
     return start_assessment(db, profile_id)
 
 
 @router.post("/sample", response_model=AssessmentResultResponse)
-def sample(profile_id: str = Query("PROFILE001"), db: Session = Depends(get_db)):
+def sample(profile_id: str = Query(PROTOTYPE_PROFILE_ID), db: Session = Depends(get_db)):
     return run_sample_assessment(db, profile_id)
 
 

@@ -4,6 +4,7 @@ from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Te
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.seed.dsa_curriculum import DSA_PROFILE_ID
 
 
 class AssessmentQuestion(Base):
@@ -11,7 +12,7 @@ class AssessmentQuestion(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     question_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
-    profile_id: Mapped[str] = mapped_column(ForeignKey("profile.id"), nullable=False, default="PROFILE001")
+    profile_id: Mapped[str] = mapped_column(ForeignKey("profile.id"), nullable=False, default=DSA_PROFILE_ID)
     skill_node_id: Mapped[str] = mapped_column(ForeignKey("skill_nodes.skill_node_id"), nullable=False)
     competency_id: Mapped[str] = mapped_column(ForeignKey("competencies.competency_id"), nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)

@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from app.models import AssessmentQuestion, AssessmentResponse, AssessmentSession, Competency, LearnerSkillState, SkillNode, SkillPrerequisite
 from app.services.assessment_service import _evidence_adjusted_mastery, _skill_evidence
 from app.services.competency_service import TARGET_LABELS, get_desired_competencies, get_profile_target_skills, get_required_competencies
-from app.services.course_service import recommend_course_for_roadmap_item
 from app.services.profile_service import PROTOTYPE_PROFILE_ID
+from app.services.roadmap_service import build_roadmap, prerequisite_health
 
 
 TARGET_MASTERY_BY_LEVEL = {
@@ -17,13 +17,6 @@ TARGET_MASTERY_BY_LEVEL = {
     4: 0.90,
 }
 
-PRIORITY_WEIGHTS = {
-    "gap": 0.35,
-    "role_requirement": 0.25,
-    "prerequisite_impact": 0.20,
-    "evidence_confidence": 0.10,
-    "misconception": 0.10,
-}
 
 
 def _json_list(value: str | None) -> list[str]:
@@ -76,7 +69,7 @@ def _response_evidence_by_skill(db: Session, profile_id: str, session_id: str | 
 def _misconceptions_by_skill(db: Session, profile_id: str, session_id: str | None) -> dict[str, list[str]]:
     result: dict[str, set[str]] = defaultdict(set)
     for response, question in _profile_responses(db, profile_id, session_id):
-        if response.correct:
+        if response.correct or response.confidence == 1:
             continue
         for tag in _json_list(question.misconception_tags):
             result[response.skill_node_id].add(tag)
@@ -92,14 +85,14 @@ def _learner_states(db: Session, profile_id: str) -> dict[str, LearnerSkillState
 
 def _all_prerequisites(db: Session) -> dict[str, list[str]]:
     grouped: dict[str, list[str]] = defaultdict(list)
-    for row in db.query(SkillPrerequisite).all():
+    for row in db.query(SkillPrerequisite).filter(SkillPrerequisite.relationship_type == "prerequisite").all():
         grouped[row.skill_node_id].append(row.prerequisite_skill_node_id)
     return {skill_id: sorted(values) for skill_id, values in grouped.items()}
 
 
 def _dependents(db: Session) -> dict[str, list[str]]:
     grouped: dict[str, list[str]] = defaultdict(list)
-    for row in db.query(SkillPrerequisite).all():
+    for row in db.query(SkillPrerequisite).filter(SkillPrerequisite.relationship_type == "prerequisite").all():
         grouped[row.prerequisite_skill_node_id].append(row.skill_node_id)
     return {skill_id: sorted(values) for skill_id, values in grouped.items()}
 
@@ -135,6 +128,8 @@ def _skill_node_state(db: Session, profile_id: str, skill: dict, target_level: i
         "gap": gap,
         "evidence_status": evidence["evidence_status"] if evidence else "not_assessed",
         "attempts": attempts,
+        "effective_attempts": evidence["effective_attempts"] if evidence else 0.0,
+        "guessing_attempts": evidence["guessing_attempts"] if evidence else 0,
         "correct_attempts": correct,
         "incorrect_attempts": evidence["incorrect_attempts"] if evidence else 0,
         "accuracy": accuracy,
@@ -193,6 +188,11 @@ def get_knowledge_graph_state(db: Session, profile_id: str = PROTOTYPE_PROFILE_I
                 "skills": skill_states,
             })
 
+    skills_by_id = {skill["skill_node_id"]: skill for competency in competencies for skill in competency["skills"]}
+    prerequisite_map = {skill_id: skill["prerequisites"] for skill_id, skill in skills_by_id.items()}
+    for skill_id, skill in skills_by_id.items():
+        skill["prerequisite_health"] = prerequisite_health(skill_id, prerequisite_map, skills_by_id)
+
     return {
         "profile_id": profile_id,
         "source": "phase4_knowledge_graph_state",
@@ -205,125 +205,6 @@ def get_knowledge_graph_state(db: Session, profile_id: str = PROTOTYPE_PROFILE_I
     }
 
 
-def _prerequisite_health(skill, skills_by_id):
-    prereq_ids = skill["prerequisites"]
-    weak = []
-    unassessed = []
-    mastered = []
-    for prereq_id in prereq_ids:
-        prereq = skills_by_id.get(prereq_id)
-        if not prereq or prereq["mastery"] is None:
-            unassessed.append(prereq_id)
-        elif prereq["mastery"] >= 0.65 and prereq["evidence_status"] not in {"weak", "uncertain"}:
-            mastered.append(prereq_id)
-        else:
-            weak.append(prereq_id)
-    if weak:
-        health = "weak"
-    elif unassessed:
-        health = "unassessed"
-    else:
-        health = "ready"
-    return {
-        "prerequisite_count": len(prereq_ids),
-        "mastered_prerequisite_count": len(mastered),
-        "weak_prerequisite_count": len(weak),
-        "unassessed_prerequisite_count": len(unassessed),
-        "weak_prerequisites": weak,
-        "unassessed_prerequisites": unassessed,
-        "prerequisite_health": health,
-    }
-
 
 def get_roadmap(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID):
-    graph = get_knowledge_graph_state(db, profile_id)
-    skills = [skill for comp in graph["competencies"] for skill in comp["skills"]]
-    skills_by_id = {skill["skill_node_id"]: skill for skill in skills}
-    candidates = []
-
-    for skill in skills:
-        prereq = _prerequisite_health(skill, skills_by_id)
-        if skill["mastery"] is None:
-            gap_score = 0.35
-            evidence_confidence_score = 1.0
-            state = "not_assessed"
-        else:
-            gap_score = min(1.0, max(0.0, skill["gap"] or 0.0))
-            evidence_confidence_score = 1.0 if skill["evidence_status"] in {"weak", "uncertain", "gathering_evidence"} else 0.25
-            if skill["mastery"] >= skill["target_mastery"] and skill["evidence_status"] == "sufficient_mastery":
-                state = "mastered"
-            elif skill["evidence_status"] in {"limited_evidence", "gathering_evidence", "uncertain"} and skill["attempts"] < 2:
-                state = "needs_more_evidence"
-            elif prereq["prerequisite_health"] == "weak":
-                state = "blocked_by_prerequisite"
-            else:
-                state = "learning_priority" if gap_score > 0.05 else "on_track"
-
-        role_requirement_score = 1.0 if skill["target_type"] == "required" else 0.6
-        prerequisite_impact_score = min(1.0, len(skill["dependents"]) / 3)
-        misconception_score = min(1.0, len(skill["misconceptions"]) / 2)
-        priority_score = (
-            PRIORITY_WEIGHTS["gap"] * gap_score
-            + PRIORITY_WEIGHTS["role_requirement"] * role_requirement_score
-            + PRIORITY_WEIGHTS["prerequisite_impact"] * prerequisite_impact_score
-            + PRIORITY_WEIGHTS["evidence_confidence"] * evidence_confidence_score
-            + PRIORITY_WEIGHTS["misconception"] * misconception_score
-        )
-        if state in {"mastered", "on_track"}:
-            priority_score *= 0.2
-        if state == "blocked_by_prerequisite":
-            priority_score *= 0.6
-
-        reasons = []
-        if skill["target_type"] == "required":
-            reasons.append("Required for role")
-        else:
-            reasons.append("Supports desired goal")
-        if skill["gap"] is not None:
-            reasons.append(f"Mastery gap: {round(skill['gap'] * 100)} percentage points")
-        if len(skill["dependents"]):
-            reasons.append(f"Prerequisite for {len(skill['dependents'])} higher-level skill(s)")
-        if prereq["weak_prerequisites"]:
-            reasons.append(f"Blocked by prerequisite: {', '.join(prereq['weak_prerequisites'])}")
-        if skill["misconceptions"]:
-            reasons.append("Potential misconception signal: " + ", ".join(skill["misconceptions"][:2]))
-        if state == "needs_more_evidence":
-            reasons.append("Diagnostic evidence is still limited")
-
-        candidates.append({
-            "skill_node_id": skill["skill_node_id"],
-            "name": skill["name"],
-            "competency_id": skill["competency_id"],
-            "competency_name": next(comp["name"] for comp in graph["competencies"] if comp["competency_id"] == skill["competency_id"]),
-            "target_type": skill["target_type"],
-            "state": state,
-            "priority_score": round(priority_score, 4),
-            "mastery": skill["mastery"],
-            "target_mastery": skill["target_mastery"],
-            "gap": skill["gap"],
-            "evidence_status": skill["evidence_status"],
-            "prerequisite_health": prereq,
-            "reasons": reasons,
-        })
-
-    prioritized = sorted(candidates, key=lambda item: item["priority_score"], reverse=True)
-    for item in prioritized:
-        item["recommended_course"] = recommend_course_for_roadmap_item(db, item)
-
-    actionable = [item for item in prioritized if item["state"] not in {"mastered", "on_track"}]
-    immediate = actionable[:1]
-    near_term = actionable[1:4]
-    later = actionable[4:8]
-    desired = [item for item in prioritized if item["target_type"] == "desired" and item["state"] not in {"mastered", "on_track"}]
-
-    return {
-        "profile_id": profile_id,
-        "source": "phase4_gap_analysis_and_roadmap",
-        "assessment_source": graph["assessment_source"],
-        "priority_weights": PRIORITY_WEIGHTS,
-        "immediate_next": immediate,
-        "near_term": near_term,
-        "later": later,
-        "desired_goal_path": desired[:5],
-        "all_candidates": prioritized,
-    }
+    return build_roadmap(get_knowledge_graph_state(db, profile_id))
