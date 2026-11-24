@@ -41,6 +41,7 @@ class AssessmentSession(Base):
     max_questions: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
     theta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     assessment_mode: Mapped[str] = mapped_column(String, nullable=False, default="live")
+    scope_skill_node_id: Mapped[str | None] = mapped_column(String, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

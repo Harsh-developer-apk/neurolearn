@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models import Activity, Department, Organization, Position, Profile, ProfileActivity, ProfileTraining, Role, TrainingCatalog
+from app.models import Activity, Profile, ProfileActivity, ProfileTraining, TrainingCatalog
 from app.seed.dsa_curriculum import DSA_PROFILE_ID
 
 
@@ -10,8 +10,7 @@ PROTOTYPE_PROFILE_ID = DSA_PROFILE_ID
 
 def list_profiles(db: Session):
     rows = (
-        db.query(Profile, Department)
-        .join(Department, Profile.department_id == Department.department_id)
+        db.query(Profile)
         .filter(Profile.id == PROTOTYPE_PROFILE_ID)
         .order_by(Profile.id)
         .all()
@@ -20,11 +19,9 @@ def list_profiles(db: Session):
         {
             "profile_id": profile.id,
             "name": profile.full_name,
-            "domain": department.name,
-            "label": f"{profile.full_name} - {department.name}",
-            "department": department.name,
+            "label": profile.full_name,
         }
-        for profile, department in rows
+        for profile in rows
     ]
 
 
@@ -32,11 +29,6 @@ def get_prototype_profile(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID):
     profile = db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Prototype profile not found")
-
-    organization = db.get(Organization, profile.organization_id)
-    department = db.get(Department, profile.department_id)
-    position = db.get(Position, profile.position_id)
-    role = db.get(Role, profile.role_id)
 
     activity_ids = [
         row.activity_id
@@ -61,30 +53,6 @@ def get_prototype_profile(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID):
         "profile_id": profile.id,
         "full_name": profile.full_name,
         "preferred_language": profile.preferred_language,
-        "organization": {
-            "organization_id": organization.organization_id,
-            "name": organization.name,
-        },
-        "department": {
-            "department_id": department.department_id,
-            "organization_id": department.organization_id,
-            "name": department.name,
-        },
-        "position": {
-            "position_id": position.position_id,
-            "department_id": position.department_id,
-            "designation": position.designation,
-        },
-        "role": {
-            "role_id": role.role_id,
-            "name": role.name,
-            "description": role.description,
-        },
-        "years_experience": profile.years_experience,
-        "education": {
-            "qualification": profile.highest_qualification,
-            "specialization": profile.specialization,
-        },
         "activities": [
             {
                 "activity_id": activity.activity_id,

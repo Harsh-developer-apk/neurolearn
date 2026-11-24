@@ -10,13 +10,6 @@ class Profile(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     preferred_language: Mapped[str] = mapped_column(String, nullable=False)
-    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.organization_id"), nullable=False)
-    department_id: Mapped[str] = mapped_column(ForeignKey("departments.department_id"), nullable=False)
-    position_id: Mapped[str] = mapped_column(ForeignKey("positions.position_id"), nullable=False)
-    role_id: Mapped[str] = mapped_column(ForeignKey("roles.role_id"), nullable=False)
-    years_experience: Mapped[int] = mapped_column(Integer, nullable=False)
-    highest_qualification: Mapped[str] = mapped_column(String, nullable=False)
-    specialization: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class ProfileActivity(Base):

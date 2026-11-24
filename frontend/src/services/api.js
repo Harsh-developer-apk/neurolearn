@@ -46,6 +46,10 @@ export async function startAssessment(profileId) {
   return response.json();
 }
 
+export async function startTopicAssessment(profileId, skillNodeId) {
+  return postJson("/assessment/topic/start", { profile_id: profileId, skill_node_id: skillNodeId });
+}
+
 export async function runSampleAssessment(profileId) {
   const response = await fetch(`${API_BASE_URL}${withProfile("/assessment/sample", profileId)}`, {
     method: "POST"
@@ -88,4 +92,25 @@ export function getLearnerRoadmap(profileId) {
 
 export function getCourse(courseId) {
   return request(`/courses/${courseId}`);
+}
+
+async function postJson(path, payload) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export function getLearningPlan(profileId, skillNodeId) {
+  return postJson("/learning/plan", { profile_id: profileId, skill_node_id: skillNodeId });
+}
+
+export function generateLearningBlock(payload) {
+  return postJson("/learning/block", payload);
 }

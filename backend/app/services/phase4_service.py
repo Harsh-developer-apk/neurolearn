@@ -55,9 +55,7 @@ def _profile_responses(db: Session, profile_id: str, session_id: str | None) -> 
 
 
 def _response_evidence_by_skill(db: Session, profile_id: str, session_id: str | None) -> dict[str, dict]:
-    grouped: dict[str, list[tuple[AssessmentResponse, AssessmentQuestion]]] = defaultdict(list)
-    for response, question in _profile_responses(db, profile_id, session_id):
-        grouped[response.skill_node_id].append((response, question))
+    grouped = _latest_session_rows_by_skill(db, profile_id, session_id)
     evidence_by_skill = {}
     for skill_id, rows in grouped.items():
         evidence = _skill_evidence(rows)
@@ -68,12 +66,34 @@ def _response_evidence_by_skill(db: Session, profile_id: str, session_id: str | 
 
 def _misconceptions_by_skill(db: Session, profile_id: str, session_id: str | None) -> dict[str, list[str]]:
     result: dict[str, set[str]] = defaultdict(set)
-    for response, question in _profile_responses(db, profile_id, session_id):
-        if response.correct or response.confidence == 1:
-            continue
-        for tag in _json_list(question.misconception_tags):
-            result[response.skill_node_id].add(tag)
+    rows_by_skill = _latest_session_rows_by_skill(db, profile_id, session_id)
+    for rows in rows_by_skill.values():
+        for response, question in rows:
+            if response.correct or response.confidence == 1:
+                continue
+            for tag in _json_list(question.misconception_tags):
+                result[response.skill_node_id].add(tag)
     return {skill_id: sorted(tags) for skill_id, tags in result.items()}
+
+
+def _latest_session_rows_by_skill(db: Session, profile_id: str, latest_session_id: str | None):
+    """Use the newest completed assessment evidence per topic, preserving unrelated topic history."""
+    rows = (
+        db.query(AssessmentResponse, AssessmentQuestion, AssessmentSession)
+        .join(AssessmentQuestion, AssessmentResponse.question_id == AssessmentQuestion.question_id)
+        .join(AssessmentSession, AssessmentResponse.session_id == AssessmentSession.session_id)
+        .filter(AssessmentSession.profile_id == profile_id, AssessmentSession.status == "completed")
+        .order_by(AssessmentSession.completed_at.desc(), AssessmentSession.id.desc(), AssessmentResponse.sequence_number.asc())
+        .all()
+    )
+    newest_session_by_skill = {}
+    for response, _, session in rows:
+        newest_session_by_skill.setdefault(response.skill_node_id, session.session_id)
+    grouped = defaultdict(list)
+    for response, question, session in rows:
+        if newest_session_by_skill.get(response.skill_node_id) == session.session_id:
+            grouped[response.skill_node_id].append((response, question))
+    return grouped
 
 
 def _learner_states(db: Session, profile_id: str) -> dict[str, LearnerSkillState]:

@@ -19,6 +19,14 @@ class StartAssessmentResponse(BaseModel):
     total_questions: int
     question: QuestionOut
     model_state: dict
+    topic: dict | None = None
+    question_provider: str | None = None
+    question_model: str | None = None
+
+
+class TopicAssessmentRequest(BaseModel):
+    profile_id: str = "PROFILE-DSA"
+    skill_node_id: str
 
 
 class SubmitAnswerRequest(BaseModel):
@@ -98,6 +106,7 @@ class AssessmentResultResponse(BaseModel):
     session_id: str
     profile_id: str
     assessment_mode: str = "live"
+    scope_skill_node_id: str | None = None
     assessment: AssessmentSummaryOut
     irt: AbilityOut
     skills: list[SkillMasteryOut]

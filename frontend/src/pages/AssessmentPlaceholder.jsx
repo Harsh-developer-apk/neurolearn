@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import Badge from "../components/Badge.jsx";
 import ProfileSelector, { getStoredProfileId } from "../components/ProfileSelector.jsx";
-import { runSampleAssessment, startAssessment, submitAssessmentAnswer } from "../services/api.js";
+import { runSampleAssessment, startAssessment, startTopicAssessment, submitAssessmentAnswer } from "../services/api.js";
 
 const confidenceLabels = {
   1: "Just guessing",
@@ -106,8 +106,11 @@ function LiveSkillTable({ modelState }) {
 
 export default function AssessmentPlaceholder() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const topicSkillId = searchParams.get("skill_node_id");
+  const topicMode = Boolean(topicSkillId);
   const startedAtRef = useRef(0);
-  const [activeProfileId, setActiveProfileId] = useState(getStoredProfileId());
+  const [activeProfileId, setActiveProfileId] = useState(searchParams.get("profile_id") || getStoredProfileId());
   const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState(null);
   const [answeredCount, setAnsweredCount] = useState(0);
@@ -120,12 +123,15 @@ export default function AssessmentPlaceholder() {
   const [modelState, setModelState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [questionModel, setQuestionModel] = useState("");
+  const [topicName, setTopicName] = useState("");
+  const autoStarted = useRef(false);
 
   async function handleStart() {
     setLoading(true);
     setError("");
     try {
-      const data = await startAssessment(activeProfileId);
+      const data = topicMode ? await startTopicAssessment(activeProfileId, topicSkillId) : await startAssessment(activeProfileId);
       setSessionId(data.session_id);
       setQuestion(data.question);
       setAnsweredCount(0);
@@ -136,13 +142,22 @@ export default function AssessmentPlaceholder() {
       setFeedback(null);
       setPendingNextQuestion(null);
       setModelState(data.model_state);
+      setQuestionModel(data.question_model ? `${data.question_provider} / ${data.question_model}` : "");
+      setTopicName(data.topic?.name || "");
       startedAtRef.current = performance.now();
     } catch (err) {
-      setError("Unable to start the diagnostic assessment. Check that the backend is running with Phase 3 routes.");
+      setError(err.message || (topicMode ? "Unable to generate this topic assessment." : "Unable to start the diagnostic assessment."));
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (topicMode && !autoStarted.current) {
+      autoStarted.current = true;
+      handleStart();
+    }
+  }, [topicSkillId]);
 
   async function handleSampleDiagnostic() {
     setLoading(true);
@@ -218,8 +233,8 @@ export default function AssessmentPlaceholder() {
       <section className="mb-6 rounded-lg border border-line bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-bold uppercase tracking-wide text-indigo">Phase 3</p>
-            <h1 className="mt-2 text-3xl font-bold text-ink">DSA Diagnostic Assessment</h1>
+            <p className="text-sm font-bold uppercase tracking-wide text-indigo">{topicMode ? "Topic knowledge check" : "Phase 3"}</p>
+            <h1 className="mt-2 text-3xl font-bold text-ink">{topicMode ? (topicName ? `${topicName} Assessment` : "Topic Assessment") : "DSA Diagnostic Assessment"}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <ProfileSelector
@@ -251,12 +266,14 @@ export default function AssessmentPlaceholder() {
 
       {!sessionId ? (
         <section className="section-card">
-          <Badge tone="blue">15-question adaptive evidence budget</Badge>
-          <h2 className="mt-4 text-2xl font-bold text-ink">Ready to assess your DSA knowledge</h2>
-          <p className="mt-3 text-slate-700">
+          <Badge tone="blue">{topicMode ? "Adaptive topic question set" : "15-question adaptive evidence budget"}</Badge>
+          <h2 className="mt-4 text-2xl font-bold text-ink">{topicMode ? "Preparing your topic assessment" : "Ready to assess your DSA knowledge"}</h2>
+          {topicMode && loading ? <p className="mt-3 text-slate-700">Generating and saving topic questions. This may take a short moment.</p> : null}
+          {!topicMode ? <p className="mt-3 text-slate-700">
             Answer 15 adaptive questions from a bank of 100 covering 10 DSA topics. Topics without enough evidence remain unassessed or uncertain.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
+          </p> : null}
+          {topicMode && !loading ? <button className="mt-6 rounded-lg bg-indigo px-5 py-3 text-sm font-bold text-white" type="button" onClick={handleStart}>Generate assessment</button> : null}
+          {!topicMode ? <div className="mt-6 flex flex-wrap gap-3">
             <button
               className="rounded-lg bg-indigo px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
               type="button"
@@ -273,12 +290,13 @@ export default function AssessmentPlaceholder() {
             >
               {loading ? "Running sample..." : "Run Sample Diagnostic (Demo)"}
             </button>
-          </div>
+          </div> : null}
         </section>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid gap-6">
             <section className="section-card">
+              {topicMode && questionModel ? <p className="mb-4 text-xs font-semibold text-muted">Question set generated by {questionModel} and saved to the assessment bank.</p> : null}
               <div className="mb-6">
                 <div className="mb-2 flex items-center justify-between text-sm font-semibold text-muted">
                   <span>Question {displayQuestionNumber} of {totalQuestions}</span>

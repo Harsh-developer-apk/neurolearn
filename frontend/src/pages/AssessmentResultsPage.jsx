@@ -76,8 +76,8 @@ export default function AssessmentResultsPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-indigo">Current learner state</p>
-            <h1 className="mt-2 text-3xl font-bold text-ink">Diagnostic completed</h1>
-            <p className="mt-3 text-slate-700">Estimated from diagnostic evidence. Ability theta is not a percentage.</p>
+            <h1 className="mt-2 text-3xl font-bold text-ink">{result.assessment_mode === "topic" ? "Topic assessment completed" : "Diagnostic completed"}</h1>
+            <p className="mt-3 text-slate-700">{result.scope_skill_node_id ? `Mastery evidence updated for ${result.skills[0]?.name || result.scope_skill_node_id}. ` : "Estimated from diagnostic evidence. "}Ability theta is not a percentage.</p>
             {result.assessment_mode === "sample" ? (
               <div className="mt-3">
                 <Badge tone="orange">Demo Sample Diagnostic</Badge>
@@ -130,7 +130,7 @@ export default function AssessmentResultsPage() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-muted">Competency-level mastery</p>
-            <h2 className="mt-1 text-2xl font-bold text-ink">Five active diagnostic competencies</h2>
+            <h2 className="mt-1 text-2xl font-bold text-ink">{result.assessment_mode === "topic" ? "Assessed topic" : "Five active diagnostic competencies"}</h2>
           </div>
           <Badge tone="blue">Prototype equal skill-weight average</Badge>
         </div>

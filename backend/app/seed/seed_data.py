@@ -226,13 +226,6 @@ def seed_database(db: Session):
         "id": "PROFILE002",
         "full_name": "Arjun Mehta",
         "preferred_language": "English",
-        "organization_id": "ORG-CS-001",
-        "department_id": "DEP-CS-001",
-        "position_id": "POS-CS-001",
-        "role_id": "ROLE-CS-001",
-        "years_experience": 2,
-        "highest_qualification": "MCA",
-        "specialization": "Computer Applications / Software Development",
     })
 
     for activity_id, _, _ in cs_activities:
@@ -343,13 +336,6 @@ def seed_dsa_curriculum(db: Session):
         "id": DSA_PROFILE_ID,
         "full_name": "Arjun Mehta",
         "preferred_language": "English",
-        "organization_id": "ORG-CS-001",
-        "department_id": "DEP-DSA",
-        "position_id": "POS-DSA",
-        "role_id": "ROLE-DSA",
-        "years_experience": 2,
-        "highest_qualification": "MCA",
-        "specialization": DSA_SUBJECT,
     })
     db.flush()
     for competency_id, _, _ in DSA_COMPETENCIES:

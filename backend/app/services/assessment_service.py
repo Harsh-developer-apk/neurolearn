@@ -242,6 +242,12 @@ def select_next_question(db: Session, session: AssessmentSession) -> AssessmentQ
         .all()
     )
     candidates = [question for question in candidates if question.question_id not in answered_ids]
+    if session.scope_skill_node_id:
+        generated_prefix = f"AIQ-{session.session_id}-"
+        candidates = [
+            question for question in candidates
+            if question.skill_node_id == session.scope_skill_node_id and question.question_id.startswith(generated_prefix)
+        ]
     if not candidates:
         return None
 
@@ -400,6 +406,49 @@ def start_assessment(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID, assess
     }
 
 
+def start_topic_assessment(db: Session, profile_id: str, skill_node_id: str):
+    _validate_assessment_profile(db, profile_id)
+    skill = db.query(SkillNode).filter(SkillNode.skill_node_id == skill_node_id).first()
+    if not skill or skill_node_id not in {row[0].skill_node_id for row in _active_skills(db, profile_id)}:
+        raise HTTPException(status_code=404, detail="Unknown DSA topic")
+
+    session_id = f"TOPIC{uuid4().hex[:8].upper()}"
+    from app.services.topic_assessment_service import generate_topic_questions
+    try:
+        questions, provider, model = generate_topic_questions(db, profile_id, skill, session_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if len(questions) < 4:
+        raise HTTPException(status_code=502, detail="The model generated too few valid assessment questions. Please try again.")
+    db.add_all(questions)
+    session = AssessmentSession(
+        session_id=session_id,
+        profile_id=profile_id,
+        status="in_progress",
+        current_question_number=0,
+        max_questions=len(questions),
+        theta=0.0,
+        assessment_mode="topic",
+        scope_skill_node_id=skill_node_id,
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    question = select_next_question(db, session)
+    if not question:
+        raise HTTPException(status_code=500, detail="No generated topic questions available")
+    return {
+        "session_id": session.session_id,
+        "question_number": 1,
+        "total_questions": session.max_questions,
+        "question": public_question(question),
+        "model_state": _model_state(db, session, question, "Begin topic assessment"),
+        "topic": {"skill_node_id": skill.skill_node_id, "name": skill.name},
+        "question_provider": provider,
+        "question_model": model,
+    }
+
+
 def _sample_answer_for_question(question: AssessmentQuestion, sequence_number: int, profile_id: str) -> dict:
     correct_options = sorted(_json_list(question.correct_options) or [question.correct_option])
     wrong_option = next(option for option in ["A", "B", "C", "D"] if option not in correct_options)
@@ -533,6 +582,8 @@ def submit_answer(
         raise HTTPException(status_code=404, detail="Question not found")
     if question.profile_id != session.profile_id or question.competency_id not in _active_competency_ids(db, session.profile_id):
         raise HTTPException(status_code=400, detail="Question is outside active diagnostic scope")
+    if session.scope_skill_node_id and question.skill_node_id != session.scope_skill_node_id:
+        raise HTTPException(status_code=400, detail="Question is outside this topic assessment")
 
     already_answered = (
         db.query(AssessmentResponse)
@@ -719,6 +770,7 @@ def get_assessment_result(db: Session, session_id: str):
         "session_id": session.session_id,
         "profile_id": session.profile_id,
         "assessment_mode": session.assessment_mode,
+        "scope_skill_node_id": session.scope_skill_node_id,
         "assessment": {
             "questions_answered": len(responses),
             "accuracy": accuracy,
@@ -742,7 +794,7 @@ def get_assessment_result(db: Session, session_id: str):
 
 
 def get_skill_mastery_states(db: Session, profile_id: str, session_id: str | None = None):
-    rows = (
+    query = (
         db.query(LearnerSkillState, SkillNode, Competency)
         .join(SkillNode, LearnerSkillState.skill_node_id == SkillNode.skill_node_id)
         .join(Competency, SkillNode.competency_id == Competency.competency_id)
@@ -750,9 +802,11 @@ def get_skill_mastery_states(db: Session, profile_id: str, session_id: str | Non
             LearnerSkillState.profile_id == profile_id,
             SkillNode.competency_id.in_(_active_competency_ids(db, profile_id)),
         )
-        .order_by(Competency.competency_id, SkillNode.skill_node_id)
-        .all()
     )
+    scope = db.query(AssessmentSession.scope_skill_node_id).filter(AssessmentSession.session_id == session_id).scalar() if session_id else None
+    if scope:
+        query = query.filter(LearnerSkillState.skill_node_id == scope)
+    rows = query.order_by(Competency.competency_id, SkillNode.skill_node_id).all()
     grouped = _skill_response_map(db, session_id) if session_id else {}
 
     result = []

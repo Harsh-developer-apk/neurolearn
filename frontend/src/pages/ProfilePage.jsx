@@ -65,25 +65,15 @@ export default function ProfilePage() {
         </div>
         <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <p className="text-sm font-bold uppercase tracking-wide text-muted">Official profile</p>
+            <p className="text-sm font-bold uppercase tracking-wide text-muted">Learner account</p>
             <h2 className="mt-2 text-4xl font-bold text-ink">{profile.full_name}</h2>
-            <p className="mt-2 text-xl text-slate-700">{profile.position.designation}</p>
-            <p className="mt-1 text-base text-muted">{profile.department.name}</p>
-            <p className="text-base text-muted">{profile.organization.name}</p>
+            <p className="mt-2 text-base text-muted">Profile ID: {profile.profile_id}</p>
+            <p className="mt-1 text-xl text-slate-700">Data Structures and Algorithms learner</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg bg-slate-50 p-4">
-              <span className="text-sm font-semibold text-muted">Experience</span>
-              <p className="mt-1 text-2xl font-bold text-ink">{profile.years_experience} years</p>
-            </div>
+          <div className="grid gap-3">
             <div className="rounded-lg bg-slate-50 p-4">
               <span className="text-sm font-semibold text-muted">Language</span>
               <p className="mt-1 text-2xl font-bold text-ink">{profile.preferred_language}</p>
-            </div>
-            <div className="rounded-lg bg-slate-50 p-4 sm:col-span-2">
-              <span className="text-sm font-semibold text-muted">Education</span>
-              <p className="mt-1 text-2xl font-bold text-ink">{profile.education.qualification}</p>
-              <p className="text-sm text-muted">Specialization: {profile.education.specialization}</p>
             </div>
           </div>
         </div>
@@ -92,9 +82,9 @@ export default function ProfilePage() {
       <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
         <section className="section-card">
           <div className="mb-4">
-            <p className="text-sm font-bold uppercase tracking-wide text-muted">Current role and activities</p>
-            <h2 className="mt-2 text-2xl font-bold text-ink">{profile.role.name}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-700">{profile.role.description}</p>
+            <p className="text-sm font-bold uppercase tracking-wide text-muted">Learning focus</p>
+            <h2 className="mt-2 text-2xl font-bold text-ink">DSA competencies</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-700">The roadmap and knowledge graph use your diagnostic answers to recommend topics to learn.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             {profile.activities.map((activity) => (

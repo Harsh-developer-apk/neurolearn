@@ -26,7 +26,7 @@ function reasonText(item) {
     : "Recommended by Phase 4 because this skill has a visible learner-state gap.";
 }
 
-function RoadmapStep({ item, index, isNext }) {
+function RoadmapStep({ item, index, isNext, profileId }) {
   return (
     <article className={`roadmap-step ${isNext ? "roadmap-next" : ""}`}>
       <div className="roadmap-rank">{index + 1}</div>
@@ -60,6 +60,10 @@ function RoadmapStep({ item, index, isNext }) {
         <div className="mt-3 rounded-lg bg-slate-50 p-2 text-xs leading-5 text-slate-700">
           <strong>Why?</strong>
           <p>{reasonText(item)}</p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {item.action !== "covered" ? <Link to={`/learn/${encodeURIComponent(item.skill_node_id)}?profile_id=${encodeURIComponent(profileId)}`} className="inline-flex rounded-lg bg-indigo px-4 py-2 text-sm font-bold text-white">Learn this topic</Link> : null}
+          <Link to={`/assessment/topic?skill_node_id=${encodeURIComponent(item.skill_node_id)}&profile_id=${encodeURIComponent(profileId)}`} className="inline-flex rounded-lg border border-indigo px-4 py-2 text-sm font-bold text-indigo">Assess this topic</Link>
         </div>
       </div>
     </article>
@@ -176,6 +180,7 @@ export default function RoadmapPage() {
               item={item}
               index={item.path_order ? item.path_order - 1 : index}
               isNext={item.skill_node_id === nextItem?.skill_node_id}
+              profileId={activeProfileId}
             />
           ))
         ) : (

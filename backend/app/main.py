@@ -1,9 +1,42 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import assessment, competency_graph, courses, health, learner, profile
+from app.api.routes import assessment, competency_graph, courses, health, learner, learning, profile
 from app.database import Base, SessionLocal, engine
 from app.seed.seed_data import seed_database
+
+
+def ensure_profile_schema():
+    """Remove legacy workplace/education columns while preserving profile IDs and dependents."""
+    if engine.dialect.name != "sqlite":
+        return
+    legacy_columns = {
+        "organization_id", "department_id", "position_id", "role_id",
+        "years_experience", "highest_qualification", "specialization",
+    }
+    with engine.connect() as connection:
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(profile)").all()}
+        connection.commit()
+        if not columns.intersection(legacy_columns):
+            return
+
+        # SQLite requires FK enforcement to be disabled outside the rebuild transaction.
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
+        try:
+            with connection.begin():
+                connection.exec_driver_sql("DROP TABLE IF EXISTS profile_new")
+                connection.exec_driver_sql(
+                    "CREATE TABLE profile_new (id VARCHAR NOT NULL PRIMARY KEY, full_name VARCHAR NOT NULL, preferred_language VARCHAR NOT NULL)"
+                )
+                connection.exec_driver_sql(
+                    "INSERT INTO profile_new (id, full_name, preferred_language) SELECT id, full_name, preferred_language FROM profile"
+                )
+                connection.exec_driver_sql("DROP TABLE profile")
+                connection.exec_driver_sql("ALTER TABLE profile_new RENAME TO profile")
+        finally:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.commit()
 
 
 def ensure_phase2_schema():
@@ -26,6 +59,8 @@ def ensure_phase3_schema():
         session_columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(assessment_sessions)").all()]
         if session_columns and "assessment_mode" not in session_columns:
             connection.exec_driver_sql("ALTER TABLE assessment_sessions ADD COLUMN assessment_mode TEXT NOT NULL DEFAULT 'live'")
+        if session_columns and "scope_skill_node_id" not in session_columns:
+            connection.exec_driver_sql("ALTER TABLE assessment_sessions ADD COLUMN scope_skill_node_id TEXT")
 
         question_columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(assessment_questions)").all()]
         question_defaults = {
@@ -58,6 +93,7 @@ def ensure_phase3_schema():
 
 def create_app() -> FastAPI:
     Base.metadata.create_all(bind=engine)
+    ensure_profile_schema()
     ensure_phase2_schema()
     ensure_phase3_schema()
     db = SessionLocal()
@@ -89,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(assessment.router)
     app.include_router(learner.router)
     app.include_router(learner.profiles_router)
+    app.include_router(learning.router)
     app.include_router(courses.router)
     return app
 
