@@ -2,6 +2,7 @@ from app.models.assessment import AssessmentQuestion, AssessmentResponse, Assess
 from app.models.competency import ActivityCompetency, Competency, SkillNode, SkillPrerequisite
 from app.models.course import Course, CourseCompetency, CourseLearningOutcome, CourseModule, CourseTopic
 from app.models.profile import Profile, ProfileActivity, ProfileDesiredCompetency, ProfileTraining
+from app.models.learning_setup import SyllabusDocument
 from app.models.reference import Activity, Department, Organization, Position, Role, RoleActivity, TrainingCatalog
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     "RoleActivity",
     "SkillNode",
     "SkillPrerequisite",
+    "SyllabusDocument",
     "TrainingCatalog",
 ]

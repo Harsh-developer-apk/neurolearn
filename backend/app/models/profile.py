@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -10,6 +10,11 @@ class Profile(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     preferred_language: Mapped[str] = mapped_column(String, nullable=False)
+    age: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    course_or_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    subject_id: Mapped[str] = mapped_column(String, nullable=False, default="dsa")
+    learning_goal: Mapped[str] = mapped_column(String, nullable=False, default="personal")
+    goal_details: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ProfileActivity(Base):

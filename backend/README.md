@@ -25,6 +25,10 @@ Each topic includes basic, intermediate and advanced items. The difficulty value
 
 ## Learning path
 
+The app opens at a guided learner setup. Learners create a profile with name, age, course/class and language, choose the currently available DSA subject, then choose personal learning or exam preparation. Exam preparation can include one syllabus file (PDF, DOCX, TXT, PNG or JPG, at most 10 MB) or pasted text. PDFs are limited to 50 pages; extracted text is limited to 100,000 characters. Images use Gemini with a retry and Gemini model fallback, then NVIDIA Nemotron OCR v2 as a provider fallback; text documents are extracted locally. The learner reviews and can change the detected DSA topic selection before saving. The uploaded binary is discarded after extraction; extracted syllabus text and selected topic IDs are stored in a separate `syllabus_documents` row tied to that learner profile.
+
+The syllabus matcher suggests topics from the DSA graph, and the learner confirms the scope. The diagnostic, roadmap and lesson requests then use that scope. Essential prerequisite topics are added automatically. Exam profiles without a syllabus continue to use the full DSA curriculum. Learner profiles are local demo profiles rather than authenticated accounts; selecting a profile does not verify identity.
+
 The roadmap uses a dependency-respecting ordering. Prerequisites and suggested preceding topics come before dependent topics; priority chooses between eligible topics. Larger downstream gaps increase the priority of foundations that prepare the learner for those topics.
 
 Each step recommends learning, brief revision or verification. Topics at their target with sufficient evidence appear under Already Covered and are excluded from repeat lessons. Mastery of at least 55% suggests revision when the evidence is sufficient; lower mastery suggests learning. Missing, uncertain or guessing-only evidence recommends a knowledge check before choosing a lesson.

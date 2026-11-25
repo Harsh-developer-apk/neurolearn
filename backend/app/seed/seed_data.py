@@ -226,6 +226,8 @@ def seed_database(db: Session):
         "id": "PROFILE002",
         "full_name": "Arjun Mehta",
         "preferred_language": "English",
+        "subject_id": "computer_science",
+        "learning_goal": "personal",
     })
 
     for activity_id, _, _ in cs_activities:
@@ -336,6 +338,8 @@ def seed_dsa_curriculum(db: Session):
         "id": DSA_PROFILE_ID,
         "full_name": "Arjun Mehta",
         "preferred_language": "English",
+        "subject_id": "dsa",
+        "learning_goal": "personal",
     })
     db.flush()
     for competency_id, _, _ in DSA_COMPETENCIES:

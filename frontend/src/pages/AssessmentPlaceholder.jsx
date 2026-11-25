@@ -270,7 +270,7 @@ export default function AssessmentPlaceholder() {
           <h2 className="mt-4 text-2xl font-bold text-ink">{topicMode ? "Preparing your topic assessment" : "Ready to assess your DSA knowledge"}</h2>
           {topicMode && loading ? <p className="mt-3 text-slate-700">Generating and saving topic questions. This may take a short moment.</p> : null}
           {!topicMode ? <p className="mt-3 text-slate-700">
-            Answer 15 adaptive questions from a bank of 100 covering 10 DSA topics. Topics without enough evidence remain unassessed or uncertain.
+            Answer up to 15 adaptive questions from the DSA bank. If you added an exam syllabus, the diagnostic focuses on its selected topics and essential prerequisites.
           </p> : null}
           {topicMode && !loading ? <button className="mt-6 rounded-lg bg-indigo px-5 py-3 text-sm font-bold text-white" type="button" onClick={handleStart}>Generate assessment</button> : null}
           {!topicMode ? <div className="mt-6 flex flex-wrap gap-3">

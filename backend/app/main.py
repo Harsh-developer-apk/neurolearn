@@ -17,26 +17,46 @@ def ensure_profile_schema():
     with engine.connect() as connection:
         columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(profile)").all()}
         connection.commit()
-        if not columns.intersection(legacy_columns):
-            return
-
-        # SQLite requires FK enforcement to be disabled outside the rebuild transaction.
-        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
-        connection.commit()
-        try:
-            with connection.begin():
-                connection.exec_driver_sql("DROP TABLE IF EXISTS profile_new")
-                connection.exec_driver_sql(
-                    "CREATE TABLE profile_new (id VARCHAR NOT NULL PRIMARY KEY, full_name VARCHAR NOT NULL, preferred_language VARCHAR NOT NULL)"
-                )
-                connection.exec_driver_sql(
-                    "INSERT INTO profile_new (id, full_name, preferred_language) SELECT id, full_name, preferred_language FROM profile"
-                )
-                connection.exec_driver_sql("DROP TABLE profile")
-                connection.exec_driver_sql("ALTER TABLE profile_new RENAME TO profile")
-        finally:
-            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        if columns.intersection(legacy_columns):
+            # SQLite requires FK enforcement to be disabled outside the rebuild transaction.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
             connection.commit()
+            try:
+                with connection.begin():
+                    connection.exec_driver_sql("DROP TABLE IF EXISTS profile_new")
+                    connection.exec_driver_sql(
+                        "CREATE TABLE profile_new (id VARCHAR NOT NULL PRIMARY KEY, full_name VARCHAR NOT NULL, preferred_language VARCHAR NOT NULL, age INTEGER, course_or_class VARCHAR, subject_id VARCHAR NOT NULL DEFAULT 'dsa', learning_goal VARCHAR NOT NULL DEFAULT 'personal', goal_details TEXT)"
+                    )
+                    current = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(profile)").all()}
+                    optional = {
+                        "age": "age" if "age" in current else "NULL",
+                        "course_or_class": "course_or_class" if "course_or_class" in current else "NULL",
+                        "subject_id": "subject_id" if "subject_id" in current else "'dsa'",
+                        "learning_goal": "learning_goal" if "learning_goal" in current else "'personal'",
+                        "goal_details": "goal_details" if "goal_details" in current else "NULL",
+                    }
+                    column_list = "id, full_name, preferred_language, " + ", ".join(optional)
+                    value_list = "id, full_name, preferred_language, " + ", ".join(optional.values())
+                    connection.exec_driver_sql(f"INSERT INTO profile_new ({column_list}) SELECT {value_list} FROM profile")
+                    connection.exec_driver_sql("DROP TABLE profile")
+                    connection.exec_driver_sql("ALTER TABLE profile_new RENAME TO profile")
+            finally:
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                connection.commit()
+
+    profile_defaults = {
+        "age": "INTEGER",
+        "course_or_class": "VARCHAR",
+        "subject_id": "VARCHAR NOT NULL DEFAULT 'dsa'",
+        "learning_goal": "VARCHAR NOT NULL DEFAULT 'personal'",
+        "goal_details": "TEXT",
+    }
+    with engine.connect() as connection:
+        columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(profile)").all()}
+        for name, definition in profile_defaults.items():
+            if columns and name not in columns:
+                connection.exec_driver_sql(f"ALTER TABLE profile ADD COLUMN {name} {definition}")
+        connection.commit()
 
 
 def ensure_phase2_schema():
@@ -94,6 +114,7 @@ def ensure_phase3_schema():
 def create_app() -> FastAPI:
     Base.metadata.create_all(bind=engine)
     ensure_profile_schema()
+    Base.metadata.tables["syllabus_documents"].create(bind=engine, checkfirst=True)
     ensure_phase2_schema()
     ensure_phase3_schema()
     db = SessionLocal()

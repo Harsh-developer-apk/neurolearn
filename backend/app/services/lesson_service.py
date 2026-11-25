@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from collections import Counter
 
@@ -13,11 +14,13 @@ from app.models import (
     AssessmentSession,
     LearnerSkillState,
     Profile,
+    SyllabusDocument,
     SkillNode,
     SkillPrerequisite,
 )
-from app.seed.dsa_curriculum import DSA_SKILLS
+from app.seed.dsa_curriculum import DSA_PROFILE_ID, DSA_SKILLS
 from app.services.ai_provider import generate_json
+from app.services.profile_service import get_learning_scope
 
 
 logger = logging.getLogger("neurolearn.ai")
@@ -43,6 +46,9 @@ def _topic_context(db: Session, skill_node_id: str, profile_id: str):
     profile = db.query(Profile).filter(Profile.id == profile_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Learner profile was not found.")
+    learning_scope = get_learning_scope(db, profile_id)
+    if learning_scope and skill_node_id not in learning_scope["included_skill_ids"]:
+        raise HTTPException(status_code=403, detail="This topic is outside the syllabus scope selected for this learner.")
 
     edges = db.query(SkillPrerequisite).filter(
         or_(
@@ -68,8 +74,32 @@ def _topic_context(db: Session, skill_node_id: str, profile_id: str):
         "preferred_language": profile.preferred_language,
         "topic_mastery_estimate": round(state.mastery_probability, 2) if state else None,
         "diagnostic_attempts": state.attempts if state else 0,
+        "course_or_class": profile.course_or_class,
+        "learning_goal": profile.learning_goal,
+        "goal_details": profile.goal_details,
     }
+    if learning_scope:
+        document = db.query(SyllabusDocument).filter(SyllabusDocument.profile_id == profile_id).order_by(SyllabusDocument.created_at.desc()).first()
+        learner["syllabus_scope"] = learning_scope
+        learner["syllabus_context"] = _syllabus_context(document.extracted_text, skill) if document else []
     return skill, prerequisites, related_ids, learner
+
+
+def _syllabus_context(text: str, skill: SkillNode) -> list[str]:
+    stop_words = {"and", "the", "with", "from", "into", "use", "using", "for", "its", "their", "about"}
+    topic_terms = {
+        term for term in re.findall(r"[a-z0-9]+", f"{skill.name} {skill.description}".casefold())
+        if len(term) > 2 and term not in stop_words
+    }
+    paragraphs = [part.strip() for part in re.split(r"\n+|(?<=[.!?])\s+", text) if part.strip()]
+    ranked = []
+    for paragraph in paragraphs:
+        words = set(re.findall(r"[a-z0-9]+", paragraph.casefold()))
+        score = len(topic_terms & words)
+        if score:
+            ranked.append((score, paragraph[:800]))
+    ranked.sort(key=lambda item: (-item[0], len(item[1])))
+    return [text for _, text in ranked[:4]]
 
 
 def _diagnostic_misconceptions(db: Session, profile_id: str, skill_node_id: str, related_ids: set[str]) -> list[dict]:
@@ -130,14 +160,16 @@ def _valid_plan_blocks(blocks) -> bool:
 
 
 def _valid_lesson(lesson: dict) -> bool:
-    if not isinstance(lesson.get("title"), str) or not isinstance(lesson.get("overview"), str):
+    if not isinstance(lesson.get("title"), str) or not lesson["title"].strip():
+        return False
+    if not isinstance(lesson.get("overview"), str) or not lesson["overview"].strip():
         return False
     blocks = lesson.get("content_blocks")
     takeaways = lesson.get("key_takeaways")
     guidance = lesson.get("misconception_guidance")
     if not isinstance(blocks, list) or not 1 <= len(blocks) <= MAX_LESSON_BLOCKS:
         return False
-    if not isinstance(takeaways, list) or not all(isinstance(item, str) for item in takeaways):
+    if not isinstance(takeaways, list) or not takeaways or not all(isinstance(item, str) and item.strip() for item in takeaways):
         return False
     if not isinstance(guidance, list):
         return False
@@ -146,18 +178,18 @@ def _valid_lesson(lesson: dict) -> bool:
         if not isinstance(block, dict):
             return False
         kind = block.get("type")
-        if kind == "text" and all(isinstance(block.get(key), str) for key in ("heading", "content")):
+        if kind == "text" and all(isinstance(block.get(key), str) and block[key].strip() for key in ("heading", "content")):
             continue
-        if kind == "code" and all(isinstance(block.get(key), str) for key in ("title", "language", "code")):
+        if kind == "code" and all(isinstance(block.get(key), str) and block[key].strip() for key in ("title", "language", "code")):
             continue
-        if kind == "table" and isinstance(block.get("title"), str) and isinstance(block.get("columns"), list) and isinstance(block.get("rows"), list):
+        if kind == "table" and isinstance(block.get("title"), str) and isinstance(block.get("columns"), list) and block["columns"] and isinstance(block.get("rows"), list) and block["rows"]:
             if all(isinstance(row, list) and len(row) == len(block["columns"]) for row in block["rows"]):
                 continue
-        if kind == "steps" and isinstance(block.get("title"), str) and isinstance(block.get("items"), list) and all(isinstance(item, str) for item in block["items"]):
+        if kind == "steps" and isinstance(block.get("title"), str) and isinstance(block.get("items"), list) and block["items"] and all(isinstance(item, str) and item.strip() for item in block["items"]):
             continue
-        if kind == "callout" and isinstance(block.get("title"), str) and isinstance(block.get("content"), str):
+        if kind == "callout" and isinstance(block.get("title"), str) and isinstance(block.get("content"), str) and block["content"].strip():
             continue
-        if kind == "complexity" and isinstance(block.get("time"), str) and isinstance(block.get("space"), str):
+        if kind == "complexity" and isinstance(block.get("time"), str) and block["time"].strip() and isinstance(block.get("space"), str) and block["space"].strip():
             continue
         if kind == "diagram" and isinstance(block.get("nodes"), list) and isinstance(block.get("edges"), list):
             if all(isinstance(node, dict) and isinstance(node.get("id"), str) and isinstance(node.get("label"), str) for node in block["nodes"]) and all(isinstance(edge, dict) and isinstance(edge.get("from"), str) and isinstance(edge.get("to"), str) for edge in block["edges"]):
@@ -302,10 +334,38 @@ def _lesson_system_prompt() -> str:
     )
 
 
+def _parse_lesson_response(raw: str) -> dict | None:
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.IGNORECASE)
+    try:
+        value = json.loads(cleaned)
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _fallback_lesson(block: dict) -> dict:
+    """Return a usable lesson outline if every configured model misses the schema."""
+    title = str(block.get("title") or "Topic lesson")
+    objective = str(block.get("objective") or "Build a clear understanding of this topic.")
+    subtopics = [str(value).strip() for value in block.get("subtopics", []) if str(value).strip()]
+    focus = "; ".join(subtopics) if subtopics else objective
+    return {
+        "title": title,
+        "overview": objective,
+        "content_blocks": [
+            {"type": "text", "heading": "What this block covers", "content": f"{objective}\n\nKey ideas in this block: {focus}."},
+            {"type": "steps", "title": "Learning path", "items": subtopics or [objective]},
+            {"type": "callout", "title": "Continue learning", "tone": "note", "content": "The lesson service could not reach a model response this time. This outline is available now; use Regenerate with my prompt to request the full explanation when the provider is ready."},
+        ],
+        "key_takeaways": subtopics[:5] or [objective],
+        "misconception_guidance": [],
+    }
+
+
 def create_plan(db: Session, profile_id: str, skill_node_id: str) -> dict:
     skill, prerequisites, related_ids, learner = _topic_context(db, skill_node_id, profile_id)
     misconceptions = _diagnostic_misconceptions(db, profile_id, skill_node_id, related_ids)
-    sources = _retrieve(db, skill_node_id, prerequisites, f"{skill.name} {skill.description}", 5)
+    sources = _retrieve(db, profile_id, skill_node_id, prerequisites, f"{skill.name} {skill.description}", 5)
     prompt = {
         "topic": {"id": skill_node_id, "name": skill.name, "description": skill.description},
         "learner": learner,
@@ -316,7 +376,7 @@ def create_plan(db: Session, profile_id: str, skill_node_id: str) -> dict:
             "Create a complete progressive teaching plan. Choose the number of blocks this topic actually needs; "
             "do not target a fixed count or add filler. Each block has one objective and a short subtopic list. "
             "Return JSON {blocks:[{title,objective,subtopics:[...]}]}. Build from foundations toward application. "
-            "Use misconception indicators to cover evidenced gaps, but do not label the learner. Retrieved question explanations "
+            "Use misconception indicators to cover evidenced gaps, but do not label the learner. Follow the syllabus scope when supplied. Retrieved question explanations "
             "are supporting concept context only: do not make the lesson plan about quiz questions."
         ),
     }
@@ -359,9 +419,12 @@ def create_plan(db: Session, profile_id: str, skill_node_id: str) -> dict:
     }
 
 
-def _retrieve(db: Session, skill_id: str, prerequisite_ids: list[str], query: str, limit: int) -> list[dict]:
+def _retrieve(db: Session, profile_id: str, skill_id: str, prerequisite_ids: list[str], query: str, limit: int) -> list[dict]:
     ids = [skill_id, *prerequisite_ids]
-    questions = db.query(AssessmentQuestion).filter(AssessmentQuestion.skill_node_id.in_(ids)).all()
+    questions = db.query(AssessmentQuestion).filter(
+        AssessmentQuestion.skill_node_id.in_(ids),
+        AssessmentQuestion.profile_id.in_({profile_id, DSA_PROFILE_ID}),
+    ).all()
     terms = set(re.findall(r"[a-z0-9]+", query.lower()))
     ranked = []
     for question in questions:
@@ -391,7 +454,7 @@ def create_block(db: Session, profile_id: str, skill_node_id: str, block_index: 
         "subtopics": [],
     }
     query = " ".join([skill.name, str(block.get("title", "")), str(block.get("objective", "")), feedback])
-    sources = _retrieve(db, skill_node_id, prerequisites, query, 5)
+    sources = _retrieve(db, profile_id, skill_node_id, prerequisites, query, 5)
     prompt = {
         "topic": {"name": skill.name, "description": skill.description},
         "learner": learner,
@@ -409,6 +472,8 @@ def create_block(db: Session, profile_id: str, skill_node_id: str, block_index: 
             "and analyze time and space complexity. Include an operation/alternative comparison table when useful. Explain common "
             "mistakes. Do not write a quiz and do not center the lesson on retrieved questions. Address the supplied misconception "
             "indicators gently, distinguishing related-topic evidence from this topic, and do not invent indicators. "
+            "When syllabus scope/context is present in learner data, stay within selected units and align examples to its wording; "
+            "treat it as scope guidance rather than a replacement for accurate subject knowledge. "
             "Return JSON fields: title, overview, content_blocks, key_takeaways, misconception_guidance. Content block types: "
             "text {type,heading,content}; code {type,title,language,code,explanation}; "
             "table {type,title,columns:[...],rows:[[...]]}; steps {type,title,items:[...]}; "
@@ -418,41 +483,47 @@ def create_block(db: Session, profile_id: str, skill_node_id: str, block_index: 
             "misconception_guidance is [{topic,indicator,correction}] and must be [] when no evidence is supplied."
         ),
     }
-    raw, provider, model = generate_json(
-        _lesson_system_prompt(), json.dumps(prompt, ensure_ascii=False), 7000, task="lesson-block",
-    )
-    original_lesson = _json_object(raw)
-    lesson = _normalize_lesson(original_lesson)
-    if not _valid_lesson(lesson):
-        original_blocks = original_lesson.get("content_blocks")
-        raw_block_summary = {
-            "container_type": type(original_blocks).__name__,
-            "count": len(original_blocks) if isinstance(original_blocks, (list, dict)) else None,
-            "sample_keys": sorted(original_blocks[0].keys())[:12] if isinstance(original_blocks, list) and original_blocks and isinstance(original_blocks[0], dict) else sorted(original_blocks.keys())[:12] if isinstance(original_blocks, dict) else [],
-            "sample_types": [item.get("type", item.get("kind")) for item in original_blocks[:5] if isinstance(item, dict)] if isinstance(original_blocks, list) else [],
-        }
-        logger.warning("ai_output_invalid task=lesson-block provider=%s model=%s issue=rich_content_schema top_keys=%s block_shapes=%s",
-                       provider, model, sorted(lesson.keys()),
-                       raw_block_summary)
-        repair_prompt = {
-            "required_shape": {
-                "title": "string",
-                "overview": "string",
-                "content_blocks": [{"type": "text|code|table|steps|callout|complexity|diagram", "fields": "as defined in requirements"}],
-                "key_takeaways": ["string"],
-                "misconception_guidance": [{"topic": "string", "indicator": "string", "correction": "string"}],
-            },
-            "invalid_previous_output": original_lesson,
-            "instruction": "Repair the content into valid JSON matching required_shape. Preserve useful details and requested code language. Do not invent diagnostic evidence.",
-        }
+    provider = "unknown"
+    model = "unknown"
+    lesson = None
+    try:
         raw, provider, model = generate_json(
-            "Repair rich lesson JSON to match the requested schema. Return JSON only.",
-            json.dumps(repair_prompt, ensure_ascii=False), 6000, task="lesson-repair",
+            _lesson_system_prompt(), json.dumps(prompt, ensure_ascii=False), 7000, task="lesson-block",
         )
-        lesson = _normalize_lesson(_json_object(raw))
-        if not _valid_lesson(lesson):
-            logger.error("ai_output_invalid task=lesson-repair provider=%s model=%s issue=rich_content_schema", provider, model)
-            raise HTTPException(status_code=502, detail="The model returned an incomplete lesson after retry. Check backend logs.")
+        original_lesson = _parse_lesson_response(raw)
+        lesson = _normalize_lesson(original_lesson or {})
+    except Exception as exc:
+        original_lesson = None
+        logger.warning("lesson_generation_recovery task=lesson-block stage=primary exception_type=%s", type(exc).__name__)
+
+    if not _valid_lesson(lesson or {}):
+        logger.warning("ai_output_invalid task=lesson-block provider=%s model=%s issue=rich_content_schema top_keys=%s",
+                       provider, model, sorted(original_lesson.keys()) if original_lesson else [])
+        # A fresh request to Gemini's native JSON endpoint avoids repeating the
+        # same provider's schema failure and works even when the OpenAI adapter
+        # has intermittent structured-output issues.
+        try:
+            fallback_model = os.getenv("GEMINI_LESSON_MODEL", "gemini-3.5-flash-lite")
+            raw, provider, model = generate_json(
+                "You are an accurate, patient DSA tutor. Create the lesson requested in the user data. "
+                "Return one complete JSON object only. Never echo the request. All fields must be present and non-null. "
+                "Include title, overview, 2 to 6 content_blocks, key_takeaways, and misconception_guidance. "
+                "Every content block must use one supported type and have its required fields.",
+                json.dumps(prompt, ensure_ascii=False), 6000, task="lesson-native-fallback",
+                providers=["gemini"], model_overrides={"gemini": fallback_model}, native_gemini=True,
+            )
+            recovered = _normalize_lesson(_parse_lesson_response(raw) or {})
+            if _valid_lesson(recovered):
+                lesson = recovered
+            else:
+                logger.warning("ai_output_invalid task=lesson-native-fallback provider=%s model=%s issue=rich_content_schema", provider, model)
+        except Exception as exc:
+            logger.warning("lesson_generation_recovery task=lesson-block stage=native_fallback exception_type=%s", type(exc).__name__)
+
+    if not _valid_lesson(lesson or {}):
+        lesson = _fallback_lesson(block)
+        provider, model = "local-fallback", "built-in lesson outline"
+        logger.warning("ai_output_fallback task=lesson-block provider=%s model=%s", provider, model)
 
     return {
         "skill_node_id": skill_node_id,

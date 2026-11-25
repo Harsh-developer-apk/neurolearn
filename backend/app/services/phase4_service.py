@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import AssessmentQuestion, AssessmentResponse, AssessmentSession, Competency, LearnerSkillState, SkillNode, SkillPrerequisite
 from app.services.assessment_service import _evidence_adjusted_mastery, _skill_evidence
 from app.services.competency_service import TARGET_LABELS, get_desired_competencies, get_profile_target_skills, get_required_competencies
-from app.services.profile_service import PROTOTYPE_PROFILE_ID
+from app.services.profile_service import PROTOTYPE_PROFILE_ID, get_learning_scope
 from app.services.roadmap_service import build_roadmap, prerequisite_health
 
 
@@ -170,6 +170,7 @@ def get_knowledge_graph_state(db: Session, profile_id: str = PROTOTYPE_PROFILE_I
     misconceptions = _misconceptions_by_skill(db, profile_id, latest_session.session_id if latest_session else None)
     prerequisites = _all_prerequisites(db)
     dependents = _dependents(db)
+    learning_scope = get_learning_scope(db, profile_id)
 
     competencies = []
     for target_type in ["required", "desired"]:
@@ -209,6 +210,8 @@ def get_knowledge_graph_state(db: Session, profile_id: str = PROTOTYPE_PROFILE_I
             })
 
     skills_by_id = {skill["skill_node_id"]: skill for competency in competencies for skill in competency["skills"]}
+    for skill_id, skill in skills_by_id.items():
+        skill["in_syllabus_scope"] = not learning_scope or skill_id in learning_scope["included_skill_ids"]
     prerequisite_map = {skill_id: skill["prerequisites"] for skill_id, skill in skills_by_id.items()}
     for skill_id, skill in skills_by_id.items():
         skill["prerequisite_health"] = prerequisite_health(skill_id, prerequisite_map, skills_by_id)
@@ -221,10 +224,37 @@ def get_knowledge_graph_state(db: Session, profile_id: str = PROTOTYPE_PROFILE_I
             "assessment_mode": latest_session.assessment_mode if latest_session else None,
             "completed_at": latest_session.completed_at.isoformat() if latest_session and latest_session.completed_at else None,
         },
+        "learning_scope": learning_scope,
         "competencies": competencies,
     }
 
 
 
 def get_roadmap(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID):
-    return build_roadmap(get_knowledge_graph_state(db, profile_id))
+    graph = get_knowledge_graph_state(db, profile_id)
+    scope = graph.get("learning_scope")
+    if scope:
+        included = set(scope["included_skill_ids"])
+        roadmap_graph = {
+            **graph,
+            "competencies": [
+                {
+                    **competency,
+                    "skills": [
+                        {
+                            **skill,
+                            "prerequisites": [node_id for node_id in skill["prerequisites"] if node_id in included],
+                            "study_predecessors": [node_id for node_id in skill.get("study_predecessors", []) if node_id in included],
+                        }
+                        for skill in competency["skills"] if skill["skill_node_id"] in included
+                    ],
+                }
+                for competency in graph["competencies"]
+                if any(skill["skill_node_id"] in included for skill in competency["skills"])
+            ],
+        }
+    else:
+        roadmap_graph = graph
+    roadmap = build_roadmap(roadmap_graph)
+    roadmap["learning_scope"] = scope
+    return roadmap

@@ -17,7 +17,7 @@ function seconds(ms) {
 }
 
 function profileDomain(profileId) {
-  return profileId === "PROFILE-DSA" ? "Data Structures and Algorithms" : "Learning Domain";
+  return "Data Structures and Algorithms";
 }
 
 function competencyEvidenceStatus(competency) {
@@ -134,7 +134,7 @@ function buildFullFlow(graph, selectedId) {
   const items = buildItems(graph);
   const selected = items.itemById.get(selectedId) || items.itemById.get(defaultSelectedId(items));
   const highlightedPath = pathToRoot(selected, items);
-  const skillRowGap = 70;
+  const skillRowGap = 76;
   const skillsByCompetency = items.skills.reduce((groups, skill) => {
     groups[skill.parentCompetencyId] = groups[skill.parentCompetencyId] || [];
     groups[skill.parentCompetencyId].push(skill);
@@ -143,7 +143,7 @@ function buildFullFlow(graph, selectedId) {
   let nextGroupY = 30;
   const competencyPositions = new Map(items.competencies.map((competency) => {
     const skillCount = (skillsByCompetency[competency.id] || []).length;
-    const groupHeight = Math.max(112, skillCount * skillRowGap);
+    const groupHeight = Math.max(104, skillCount * skillRowGap);
     const competencyY = nextGroupY + (Math.max(0, skillCount - 1) * skillRowGap) / 2;
     nextGroupY += groupHeight;
     return [competency.id, competencyY];
@@ -152,7 +152,7 @@ function buildFullFlow(graph, selectedId) {
     {
       id: "profile-root",
       type: "domain",
-      position: { x: 20, y: (30 + nextGroupY) / 2 },
+      position: { x: 15, y: (32 + nextGroupY) / 2 },
       data: {
         label: profileDomain(graph.profile_id),
         item: { id: "profile-root", kind: "profile", label: profileDomain(graph.profile_id) },
@@ -168,7 +168,7 @@ function buildFullFlow(graph, selectedId) {
     nodes.push({
       id: competency.id,
       type: "topic",
-      position: { x: 260, y: competencyY },
+      position: { x: 240, y: competencyY },
       data: {
         label: competency.label,
         item: competency,
@@ -184,7 +184,6 @@ function buildFullFlow(graph, selectedId) {
       target: competency.id,
       animated: highlightedPath.has(competency.id),
       className: highlightedPath.has(competency.id) ? "kg-edge-path" : competency.target_type === "desired" ? "kg-edge-desired" : "kg-edge-muted",
-      label: competency.target_type === "desired" ? "desired" : "required"
     });
   });
 
@@ -198,7 +197,7 @@ function buildFullFlow(graph, selectedId) {
       nodes.push({
         id: skill.id,
         type: "topic",
-        position: { x: 560, y: skillY },
+        position: { x: 520, y: skillY },
         data: {
           label: skill.label,
           item: skill,
@@ -213,8 +212,7 @@ function buildFullFlow(graph, selectedId) {
         source: competency.id,
         target: skill.id,
         animated: highlightedPath.has(competency.id) && highlightedPath.has(skill.id),
-        className: highlightedPath.has(competency.id) && highlightedPath.has(skill.id) ? "kg-edge-path" : skill.target_type === "desired" ? "kg-edge-desired" : "kg-edge-muted",
-        label: skill.target_type === "desired" ? "goal skill" : "skill"
+        className: highlightedPath.has(competency.id) && highlightedPath.has(skill.id) ? "kg-edge-path" : skill.target_type === "desired" ? "kg-edge-desired" : "kg-edge-muted"
       });
     });
   });
@@ -229,8 +227,7 @@ function buildFullFlow(graph, selectedId) {
         source: prerequisite.id,
         target: skill.id,
         animated: isSelectedPrereqPath,
-        className: isSelectedPrereqPath ? "kg-edge-path kg-edge-prereq" : "kg-edge-muted kg-edge-prereq",
-        label: "prerequisite"
+        className: isSelectedPrereqPath ? "kg-edge-path kg-edge-prereq" : "kg-edge-muted kg-edge-prereq"
       });
     });
     (skill.study_predecessors || []).forEach((predecessorId) => {
@@ -240,8 +237,7 @@ function buildFullFlow(graph, selectedId) {
         id: `study-${predecessor.id}-${skill.id}`,
         source: predecessor.id,
         target: skill.id,
-        className: "kg-edge-muted kg-edge-prereq",
-        label: "suggested order"
+        className: "kg-edge-muted kg-edge-prereq"
       });
     });
   });
@@ -262,7 +258,7 @@ function DetailCard({ item, compact = false }) {
   const evidenceCount = item.kind === "competency" ? `${item.evidence_coverage.assessed_skills}/${item.evidence_coverage.total_skills} skill(s)` : `${item.attempts} question(s)`;
 
   return (
-    <aside className={compact ? "kg-tooltip" : "section-card kg-detail"}>
+    <aside className={compact ? "kg-tooltip" : "section-card kg-detail kg-detail-panel"}>
       <p className="text-xs font-bold uppercase tracking-wide text-indigo">{compact ? "Preview" : item.kind === "competency" ? item.competency_id : item.skill_node_id}</p>
       <h2 className="mt-1 text-xl font-bold text-ink">{item.label}</h2>
       <div className="mt-4 grid gap-2 text-sm text-slate-700">
@@ -300,8 +296,16 @@ function DetailCard({ item, compact = false }) {
 function FitOnChange({ focusKey }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
-    const id = window.setTimeout(() => fitView({ padding: 0.18, duration: 500 }), 80);
-    return () => window.clearTimeout(id);
+    let timer = window.setTimeout(() => fitView({ padding: 0.16, duration: 420 }), 100);
+    const fitOnResize = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => fitView({ padding: 0.16, duration: 280 }), 140);
+    };
+    window.addEventListener("resize", fitOnResize);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", fitOnResize);
+    };
   }, [fitView, focusKey]);
   return null;
 }
@@ -358,16 +362,19 @@ export default function KnowledgeGraphStatePage() {
         <div className="kg-shell kg-shell-allnodes">
           <div className="kg-legend kg-legend-focused">
             {Object.entries(stateLabels).map(([key, label]) => <span key={key} className={`legend-dot legend-${key}`}>{label}</span>)}
-            <span>Click a topic to highlight its path</span>
+            <span className="kg-edge-legend"><i className="kg-edge-swatch" /> Learning path</span>
+            <span className="kg-edge-legend"><i className="kg-edge-swatch kg-edge-swatch-prerequisite" /> Prerequisite / study order</span>
+            <span className="kg-legend-hint">Select a topic to inspect its evidence and highlight its path.</span>
           </div>
           {hoveredItem ? <DetailCard item={hoveredItem} compact /> : null}
           <ReactFlow
             nodes={flow.nodes}
             edges={flow.edges}
             nodeTypes={nodeTypes}
+            style={{ background: "#0d0e16" }}
             fitView
-            minZoom={0.35}
-            maxZoom={1.4}
+            minZoom={0.45}
+            maxZoom={1.6}
             onNodeMouseEnter={(_, node) => node.data?.item && setHoveredItem(node.data.item)}
             onNodeMouseLeave={() => setHoveredItem(null)}
             onNodeClick={(_, node) => {
@@ -375,7 +382,7 @@ export default function KnowledgeGraphStatePage() {
             }}
           >
             <FitOnChange focusKey={flow.selected?.id} />
-            <Background gap={28} color="#d8e0ee" />
+            <Background gap={28} size={1.1} color="#343447" />
             <Controls showInteractive={false} />
           </ReactFlow>
         </div>

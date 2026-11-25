@@ -8,11 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.models import AssessmentQuestion, AssessmentResponse, AssessmentSession, Competency, LearnerSkillState, SkillNode, SkillPrerequisite
 from app.seed.question_bank import PROFILE_ACTIVE_COMPETENCY_IDS
+from app.seed.dsa_curriculum import DSA_PROFILE_ID
 from app.services.competency_service import get_required_competencies
 from app.services.bkt_service import L0, update_mastery_probability
 from app.services.irt_service import ability_label, probability_correct, update_theta
 from app.services.confidence_service import response_weight
-from app.services.profile_service import PROTOTYPE_PROFILE_ID, get_prototype_profile
+from app.services.profile_service import PROTOTYPE_PROFILE_ID, get_learning_scope, get_prototype_profile
 
 
 MAX_QUESTIONS = 15
@@ -235,7 +236,7 @@ def select_next_question(db: Session, session: AssessmentSession) -> AssessmentQ
     candidates = (
         db.query(AssessmentQuestion)
         .filter(
-            AssessmentQuestion.profile_id == session.profile_id,
+            AssessmentQuestion.profile_id.in_({session.profile_id, DSA_PROFILE_ID}),
             AssessmentQuestion.competency_id.in_(active_competency_ids),
             AssessmentQuestion.skill_node_id.in_(active_skill_ids),
         )
@@ -248,6 +249,14 @@ def select_next_question(db: Session, session: AssessmentSession) -> AssessmentQ
             question for question in candidates
             if question.skill_node_id == session.scope_skill_node_id and question.question_id.startswith(generated_prefix)
         ]
+    else:
+        # Keep the baseline diagnostic on the reviewed shared bank. Per-session AI questions
+        # are reserved for the topic assessment that generated them.
+        candidates = [question for question in candidates if question.profile_id == DSA_PROFILE_ID]
+        syllabus_scope = get_learning_scope(db, session.profile_id)
+        if syllabus_scope:
+            scoped_ids = set(syllabus_scope["included_skill_ids"])
+            candidates = [question for question in candidates if question.skill_node_id in scoped_ids]
     if not candidates:
         return None
 
@@ -373,19 +382,30 @@ def _model_state(db: Session, session: AssessmentSession, question: AssessmentQu
 
 
 def _validate_assessment_profile(db: Session, profile_id: str):
-    get_prototype_profile(db, profile_id)
-    if profile_id not in PROFILE_ACTIVE_COMPETENCY_IDS:
-        raise HTTPException(status_code=400, detail="Only the DSA diagnostic is currently available")
+    profile = get_prototype_profile(db, profile_id)
+    if profile.get("subject_id") != "dsa":
+        raise HTTPException(status_code=400, detail="Only DSA learner profiles are supported right now")
+    if not _active_competency_ids(db, profile_id):
+        raise HTTPException(status_code=400, detail="This learner profile has no active DSA subject")
 
 
 def start_assessment(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID, assessment_mode: str = "live"):
     _validate_assessment_profile(db, profile_id)
+    syllabus_scope = get_learning_scope(db, profile_id)
+    scoped_question_count = None
+    if syllabus_scope:
+        scoped_question_count = db.query(AssessmentQuestion).filter(
+            AssessmentQuestion.profile_id == DSA_PROFILE_ID,
+            AssessmentQuestion.competency_id.in_(_active_competency_ids(db, profile_id)),
+            AssessmentQuestion.skill_node_id.in_(syllabus_scope["included_skill_ids"]),
+        ).count()
+    question_budget = min(MAX_QUESTIONS, scoped_question_count) if scoped_question_count else MAX_QUESTIONS
     session = AssessmentSession(
         session_id=f"{'SAMPLE' if assessment_mode == 'sample' else 'SESSION'}{uuid4().hex[:8].upper()}",
         profile_id=profile_id,
         status="in_progress",
         current_question_number=0,
-        max_questions=MAX_QUESTIONS,
+        max_questions=question_budget,
         theta=0.0,
         assessment_mode=assessment_mode,
     )
@@ -408,6 +428,9 @@ def start_assessment(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID, assess
 
 def start_topic_assessment(db: Session, profile_id: str, skill_node_id: str):
     _validate_assessment_profile(db, profile_id)
+    syllabus_scope = get_learning_scope(db, profile_id)
+    if syllabus_scope and skill_node_id not in syllabus_scope["included_skill_ids"]:
+        raise HTTPException(status_code=403, detail="This topic is outside the syllabus scope selected for this learner")
     skill = db.query(SkillNode).filter(SkillNode.skill_node_id == skill_node_id).first()
     if not skill or skill_node_id not in {row[0].skill_node_id for row in _active_skills(db, profile_id)}:
         raise HTTPException(status_code=404, detail="Unknown DSA topic")
@@ -503,7 +526,7 @@ def _sample_answer_dataset(db: Session, profile_id: str) -> dict[str, dict]:
     questions = (
         db.query(AssessmentQuestion)
         .filter(
-            AssessmentQuestion.profile_id == profile_id,
+            AssessmentQuestion.profile_id == DSA_PROFILE_ID,
             AssessmentQuestion.competency_id.in_(_active_competency_ids(db, profile_id)),
         )
         .order_by(AssessmentQuestion.question_id)
@@ -580,7 +603,7 @@ def submit_answer(
     question = db.query(AssessmentQuestion).filter(AssessmentQuestion.question_id == question_id).first()
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    if question.profile_id != session.profile_id or question.competency_id not in _active_competency_ids(db, session.profile_id):
+    if question.profile_id not in {session.profile_id, DSA_PROFILE_ID} or question.competency_id not in _active_competency_ids(db, session.profile_id):
         raise HTTPException(status_code=400, detail="Question is outside active diagnostic scope")
     if session.scope_skill_node_id and question.skill_node_id != session.scope_skill_node_id:
         raise HTTPException(status_code=400, detail="Question is outside this topic assessment")

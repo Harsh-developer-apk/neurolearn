@@ -126,6 +126,7 @@ export default function RoadmapPage() {
             <p className="mt-3 max-w-3xl text-slate-700">
               Build foundations before advanced topics. Learn, revise or verify each topic based on your diagnostic evidence.
             </p>
+            {roadmap.learning_scope ? <div className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900"><strong>Exam scope:</strong> {roadmap.learning_scope.syllabus_filename} <span className="text-violet-700/70">· {roadmap.learning_scope.selected_skill_ids.length} selected topics, prerequisites included</span></div> : null}
             {roadmap.assessment_source?.assessment_mode === "sample" ? <div className="mt-3"><Badge tone="orange">Demo Sample Diagnostic</Badge></div> : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">

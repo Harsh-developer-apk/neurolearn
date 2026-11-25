@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.competency import DesiredCompetenciesResponse, ProfileTargetsResponse, ProfileTargetSkillsResponse, RequiredCompetenciesResponse
-from app.schemas.profile import ProfileOut
+from app.schemas.profile import LearnerOnboardingRequest, ProfileOut, SyllabusPreviewRequest
 from app.services.competency_service import get_desired_competencies, get_profile_target_skills, get_required_competencies
+from app.services.onboarding_service import create_learner, preview_syllabus
 from app.services.profile_service import PROTOTYPE_PROFILE_ID, get_prototype_profile, list_profiles
 
 
@@ -19,6 +20,16 @@ def profile(profile_id: str = Query(PROTOTYPE_PROFILE_ID), db: Session = Depends
 @router.get("s")
 def profiles(db: Session = Depends(get_db)):
     return list_profiles(db)
+
+
+@router.post("/syllabus/preview")
+def syllabus_preview(payload: SyllabusPreviewRequest):
+    return preview_syllabus(payload)
+
+
+@router.post("/onboarding")
+def onboarding(payload: LearnerOnboardingRequest, db: Session = Depends(get_db)):
+    return create_learner(db, payload)
 
 
 @router.get("s/{profile_id}", response_model=ProfileOut)

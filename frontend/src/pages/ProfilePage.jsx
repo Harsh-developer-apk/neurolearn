@@ -68,7 +68,7 @@ export default function ProfilePage() {
             <p className="text-sm font-bold uppercase tracking-wide text-muted">Learner account</p>
             <h2 className="mt-2 text-4xl font-bold text-ink">{profile.full_name}</h2>
             <p className="mt-2 text-base text-muted">Profile ID: {profile.profile_id}</p>
-            <p className="mt-1 text-xl text-slate-700">Data Structures and Algorithms learner</p>
+              <p className="mt-1 text-xl text-slate-700">{profile.course_or_class || "Data Structures and Algorithms learner"}</p>
           </div>
           <div className="grid gap-3">
             <div className="rounded-lg bg-slate-50 p-4">
@@ -144,7 +144,7 @@ export default function ProfilePage() {
           <p className="text-sm font-bold uppercase tracking-wide text-muted">Next module</p>
           <h2 className="mt-1 text-2xl font-bold text-ink">Diagnostic assessment</h2>
           <p className="mt-2 text-sm text-slate-700">
-            Start a 15-question DSA diagnostic drawn from 100 questions across 10 topics to estimate your knowledge from answer evidence.
+            Start an adaptive DSA diagnostic. If you added an exam syllabus, the questions focus on its selected topics and essential prerequisites.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

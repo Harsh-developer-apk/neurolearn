@@ -12,6 +12,14 @@ export function getProfiles() {
   return request("/profiles");
 }
 
+export async function previewSyllabus(payload) {
+  return postJson("/profile/syllabus/preview", payload);
+}
+
+export async function createLearnerProfile(payload) {
+  return postJson("/profile/onboarding", payload);
+}
+
 function withProfile(path, profileId) {
   return profileId ? `${path}${path.includes("?") ? "&" : "?"}profile_id=${encodeURIComponent(profileId)}` : path;
 }

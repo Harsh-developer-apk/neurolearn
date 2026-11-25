@@ -6,12 +6,15 @@ const STORAGE_KEY = "learning.dsaProfileId";
 
 export function getStoredProfileId() {
   const profileId = localStorage.getItem(STORAGE_KEY);
-  if (profileId === "PROFILE-DSA") return profileId;
-  return "PROFILE-DSA";
+  return profileId || "PROFILE-DSA";
+}
+
+export function hasStoredProfile() {
+  return Boolean(localStorage.getItem(STORAGE_KEY));
 }
 
 export function setStoredProfileId(profileId) {
-  if (profileId === "PROFILE-DSA") localStorage.setItem(STORAGE_KEY, profileId);
+  if (profileId) localStorage.setItem(STORAGE_KEY, profileId);
 }
 
 export default function ProfileSelector({ activeProfileId, onChange }) {

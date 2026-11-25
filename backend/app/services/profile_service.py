@@ -1,8 +1,10 @@
+import json
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models import Activity, Profile, ProfileActivity, ProfileTraining, TrainingCatalog
-from app.seed.dsa_curriculum import DSA_PROFILE_ID
+from app.models import Activity, Profile, ProfileActivity, ProfileTraining, SkillPrerequisite, SyllabusDocument, TrainingCatalog
+from app.seed.dsa_curriculum import DSA_PROFILE_ID, DSA_SKILLS
 
 
 PROTOTYPE_PROFILE_ID = DSA_PROFILE_ID
@@ -11,7 +13,7 @@ PROTOTYPE_PROFILE_ID = DSA_PROFILE_ID
 def list_profiles(db: Session):
     rows = (
         db.query(Profile)
-        .filter(Profile.id == PROTOTYPE_PROFILE_ID)
+        .filter(Profile.subject_id == "dsa")
         .order_by(Profile.id)
         .all()
     )
@@ -53,6 +55,11 @@ def get_prototype_profile(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID):
         "profile_id": profile.id,
         "full_name": profile.full_name,
         "preferred_language": profile.preferred_language,
+        "age": profile.age,
+        "course_or_class": profile.course_or_class,
+        "subject_id": profile.subject_id,
+        "learning_goal": profile.learning_goal,
+        "goal_details": profile.goal_details,
         "activities": [
             {
                 "activity_id": activity.activity_id,
@@ -70,4 +77,45 @@ def get_prototype_profile(db: Session, profile_id: str = PROTOTYPE_PROFILE_ID):
             }
             for profile_training, training in training_rows
         ],
+    }
+
+
+def get_learning_scope(db: Session, profile_id: str) -> dict | None:
+    profile = db.query(Profile).filter(Profile.id == profile_id).first()
+    if not profile or profile.learning_goal != "exam":
+        return None
+    document = (
+        db.query(SyllabusDocument)
+        .filter(SyllabusDocument.profile_id == profile_id)
+        .order_by(SyllabusDocument.created_at.desc())
+        .first()
+    )
+    if not document:
+        return None
+    try:
+        selected = set(json.loads(document.included_skill_ids or "[]"))
+    except (TypeError, json.JSONDecodeError):
+        selected = set()
+    valid_ids = {row[0] for row in DSA_SKILLS}
+    selected.intersection_update(valid_ids)
+    if not selected:
+        return None
+    prerequisites = {}
+    for skill_id, prerequisite_id in db.query(SkillPrerequisite.skill_node_id, SkillPrerequisite.prerequisite_skill_node_id).filter(
+        SkillPrerequisite.relationship_type == "prerequisite"
+    ).all():
+        prerequisites.setdefault(skill_id, set()).add(prerequisite_id)
+    included = set(selected)
+    frontier = list(selected)
+    while frontier:
+        current = frontier.pop()
+        for prerequisite_id in prerequisites.get(current, set()):
+            if prerequisite_id in valid_ids and prerequisite_id not in included:
+                included.add(prerequisite_id)
+                frontier.append(prerequisite_id)
+    return {
+        "mode": "exam",
+        "syllabus_filename": document.filename,
+        "selected_skill_ids": sorted(selected),
+        "included_skill_ids": sorted(included),
     }
